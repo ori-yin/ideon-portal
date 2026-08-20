@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% if need_start and need_start_title %}{{ need_start_title }} · {% endif %}ideon 内容智能中台</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-40.605 -59.125 351.91 354.75'><path d='M194.5 16.8c23.3 0 42.2 98.3 42.2 219.7h34C270.7 105.8 236.4 0 194.4 0c-24 0-45.2 31.7-59.2 81.5C121.2 31.7 100 0 76.2 0 34.2 0 0 105.7 0 236.4h34C34 115 52.7 16.8 76 16.8s42.2 90.8 42.2 202.8H152c0-112 19-202.8 42.3-202.8' fill='%23fc0'/></svg>">
+<style>
+  :root {
+    --mcd-red: #DA291C;
+    --mcd-red-dark: #B81D12;
+    --mcd-yellow: #FFC72C;
+    --mcd-black: #262626;
+    --mcd-gray: #6B6B6B;
+    --mcd-bg: #F5F7FA;
+    --mcd-border: #E8EAED;
+    --sidebar-bg: #2A2A2A;
+    --sidebar-bg-hover: #383838;
+    --sidebar-text: #E5E7EB;
+    --sidebar-text-dim: #9CA3AF;
+    --sidebar-active: #FFBA0D;
+    --running: #16A34A;
+    --stopped: #9CA3AF;
+    --failed: #DC2626;
+    --shadow-card: 0 2px 12px rgba(0,0,0,0.06);
+    --shadow-card-hover: 0 6px 18px rgba(0,0,0,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--mcd-bg);
+    color: var(--mcd-black);
+    font-size: 14px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ============== 布局 ============== */
+  .app {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    grid-template-rows: 72px 1fr;
+    grid-template-areas: "sidebar topbar" "sidebar content";
+    height: 100vh;
+  }
+
+  /* ============== 侧边栏 ============== */
+  .sidebar {
+    grid-area: sidebar;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .sidebar-logo {
+    height: 72px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
+  }
+  .sidebar-logo .logo-svg {
+    height: 32px;
+    width: auto;
+    flex-shrink: 0;
+  }
+  .sidebar-logo .logo-text {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+
+  .nav { padding: 16px; }
+  .nav-group-title {
+    font-size: 11px;
+    color: var(--sidebar-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 500;
+    padding: 8px 16px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    color: var(--sidebar-text);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+  }
+  .nav-item:hover { background: var(--sidebar-bg-hover); }
+  .nav-item.active {
+    background: var(--sidebar-active);
+    color: #222222;
+    font-weight: 600;
+  }
+  .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .nav-item .nav-text { flex: 1; }
+  .nav-item .badge-coming {
+    font-size: 10px;
+    padding: 2px 8px;
+    background: rgba(255,255,255,0.08);
+    color: var(--sidebar-text-dim);
+    border-radius: 4px;
+    margin-left: auto;
+  }
+  .nav-item.active .badge-coming {
+    background: rgba(0,0,0,0.1);
+    color: #555;
+  }
+
+  /* ============== 顶部栏 ============== */
+  .topbar {
+    grid-area: topbar;
+    background: white;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 32px;
+  }
+  .topbar-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--mcd-black);
+    letter-spacing: -0.3px;
+  }
+  .topbar-right {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .topbar-info {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px;
+    color: var(--mcd-gray);
+    padding: 6px 12px;
+    background: var(--mcd-bg);
+    border-radius: 8px;
+  }
+  .topbar-info svg { width: 16px; height: 16px; }
+  .user-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--mcd-red), var(--mcd-red-dark));
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  /* ============== 内容区 ============== */
+  .content {
+    grid-area: content;
+    overflow-y: auto;
+    padding: 24px 32px 40px;
+  }
+
+  .banner {
+    padding: 12px 18px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+    background: #FFF8E1;
+    color: #B45309;
+    border: 1px solid #FCD34D;
+  }
+  .banner svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .banner-error {
+    background: #FEE2E2;
+    color: #B91C1C;
+    border-color: #FCA5A5;
+  }
+
+  /* ============== KPI ============== */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+  .kpi-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow-card);
+  }
+  .kpi-label {
+    font-size: 12px;
+    color: var(--mcd-gray);
+    margin-bottom: 8px;
+  }
+  .kpi-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--mcd-black);
+    letter-spacing: -0.5px;
+  }
+  .kpi-value .unit {
+    font-size: 13px;
+    color: var(--mcd-gray);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  .kpi-sub {
+    font-size: 11px;
+    color: var(--mcd-gray);
+    margin-top: 6px;
+  }
+
+  /* ============== 工具卡 ============== */
+  .section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--mcd-black);
+    margin: 0 0 16px;
+  }
+
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+  .tool-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow-card);
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+  }
+  .tool-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .tool-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  .tool-icon-wrap {
+    width: 52px; height: 52px;
+    border-radius: 12px;
+    background: #FFF4D7;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--mcd-red);
+  }
+  .tool-icon-wrap svg { width: 26px; height: 26px; }
+
+  .tool-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .tool-status .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+  .status-running { color: var(--running); }
+  .status-running .dot { background: var(--running); box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15); }
+  .status-stopped { color: var(--stopped); }
+  .status-stopped .dot { background: var(--stopped); }
+  .status-failed { color: var(--failed); }
+  .status-failed .dot { background: var(--failed); }
+  .status-not_installed { color: #EA580C; }
+  .status-not_installed .dot { background: #EA580C; }
+
+  .tool-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--mcd-black);
+    margin-bottom: 6px;
+  }
+  .tool-subtitle {
+    font-size: 13px;
+    color: var(--mcd-gray);
+    margin-bottom: 12px;
+    min-height: 40px;
+    line-height: 1.5;
+  }
+  .tool-meta {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 4px;
+  }
+
+  /* 4 按钮行 */
+  .tool-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .tool-btn {
+    flex: 1;
+    padding: 9px 8px;
+    border: 1px solid var(--mcd-border);
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    text-decoration: none;
+    color: var(--mcd-black);
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .tool-btn:hover:not(:disabled) {
+    border-color: var(--mcd-black);
+    color: var(--mcd-black);
+  }
+  .tool-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .tool-btn-primary {
+    background: var(--mcd-red);
+    border-color: var(--mcd-red);
+    color: white;
+    flex: 1.3;
+  }
+  .tool-btn-primary:hover:not(:disabled) {
+    background: var(--mcd-red-dark);
+    border-color: var(--mcd-red-dark);
+    color: white;
+  }
+
+  /* ============== 底部面板 ============== */
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .panel {
+    background: white;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+  }
+  .panel ul { list-style: none; }
+  .panel li {
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f3f3;
+    font-size: 13px;
+    color: var(--mcd-black);
+  }
+  .panel li:last-child { border-bottom: none; }
+  .panel .date {
+    color: #999;
+    margin-right: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ============== 响应式 ============== */
+  @media (max-width: 1280px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .row { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 1024px) {
+    .app { grid-template-columns: 64px 1fr; }
+    .sidebar-logo .logo-text,
+    .nav-item .nav-text,
+    .nav-group-title,
+    .nav-item .badge-coming { display: none; }
+    .nav-item { justify-content: center; padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Heroicons 内联 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+    </symbol>
+    <symbol id="i-chart-bar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+    </symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.757A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+    </symbol>
+    <symbol id="i-trending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
+    </symbol>
+    <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h6v6h6V6h-6V0h-6v6zM12 6V0" />
+      <circle cx="12" cy="14" r="7" stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+    </symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </symbol>
+    <symbol id="i-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+    </symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+    </symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z" />
+    </symbol>
+    <symbol id="i-restart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+    </symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- 侧边栏 -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <!-- 官方 McDonald's 金拱 SVG -->
+      <svg class="logo-svg" xmlns="http://www.w3.org/2000/svg" viewBox="-40.605 -59.125 351.91 354.75" aria-label="McDonald's golden arches">
+        <path d="M194.5 16.8c23.3 0 42.2 98.3 42.2 219.7h34C270.7 105.8 236.4 0 194.4 0c-24 0-45.2 31.7-59.2 81.5C121.2 31.7 100 0 76.2 0 34.2 0 0 105.7 0 236.4h34C34 115 52.7 16.8 76 16.8s42.2 90.8 42.2 202.8H152c0-112 19-202.8 42.3-202.8" fill="#fc0"/>
+      </svg>
+      <span class="logo-text">ideon</span>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-item active" data-tool="">
+        <svg><use href="#i-home"></use></svg>
+        <span class="nav-text">首页</span>
+      </div>
+    </nav>
+
+    <nav class="nav">
+      <div class="nav-group-title">AI 工具</div>
+      {% for key, name, icon in [
+        ('content-rank', '内容排行', 'i-chart-bar'),
+        ('copy-analyzer', '文案解析', 'i-pencil'),
+        ('reach-trend', '触达趋势', 'i-trending'),
+        ('ctr-predictor', 'CTR 预测', 'i-target'),
+        ('library', '图书馆', 'i-book'),
+      ] %}
+      <div class="nav-item" data-tool="{{ key }}">
+        <svg><use href="#{{ icon }}"></use></svg>
+        <span class="nav-text">{{ name }}</span>
+      </div>
+      {% endfor %}
+    </nav>
+
+    <nav class="nav">
+      <div class="nav-group-title">预留</div>
+      <div class="nav-item" style="opacity:0.5">
+        <svg><use href="#i-book"></use></svg>
+        <span class="nav-text">使用文档</span>
+        <span class="badge-coming">待上线</span>
+      </div>
+      <div class="nav-item" style="opacity:0.5">
+        <svg><use href="#i-clock"></use></svg>
+        <span class="nav-text">更新日志</span>
+        <span class="badge-coming">待上线</span>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- 顶部 -->
+  <header class="topbar">
+    <div class="topbar-title" id="greeting-title">首页</div>
+    <div class="topbar-right">
+      <div class="topbar-info">
+        <svg><use href="#i-clock"></use></svg>
+        <span>闲置 {{ idle_timeout }} 分钟自动停止</span>
+      </div>
+      <div class="user-avatar" title="内部用户">i</div>
+    </div>
+  </header>
+
+  <!-- 内容 -->
+  <main class="content">
+
+    {% if need_start and need_start_title %}
+    <div class="banner {% if err %}banner-error{% endif %}">
+      <svg><use href="#i-warning"></use></svg>
+      <span>
+        {% if err %}
+        启动工具 <strong>{{ need_start_title }}</strong> 失败：{{ err }}
+        {% else %}
+        工具 <strong>{{ need_start_title }}</strong> 服务尚未部署，请联系管理员部署后重试。
+        {% endif %}
+      </span>
+    </div>
+    {% endif %}
+
+    <!-- KPI -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">工具总数</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-sub">已配置</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">在线运行</div>
+        <div class="kpi-value" id="kpi-running">—</div>
+        <div class="kpi-sub" id="kpi-running-sub">实时状态</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">总访问次数</div>
+        <div class="kpi-value" id="kpi-opens">—</div>
+        <div class="kpi-sub">自部署以来累计</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">闲置超时</div>
+        <div class="kpi-value" id="kpi-idle">—</div>
+        <div class="kpi-sub">无访问后自动停止</div>
+      </div>
+    </div>
+
+    <!-- 工具卡 -->
+    <div class="section-title">我的常用工具</div>
+    <div class="tool-grid">
+      {% for card in cards %}
+      <div class="tool-card" data-key="{{ card.key }}">
+        <div class="tool-card-header">
+          <div class="tool-icon-wrap">
+            {% if card.key == 'content-rank' %}<svg><use href="#i-chart-bar"></use></svg>
+            {% elif card.key == 'copy-analyzer' %}<svg><use href="#i-pencil"></use></svg>
+            {% elif card.key == 'reach-trend' %}<svg><use href="#i-trending"></use></svg>
+            {% elif card.key == 'ctr-predictor' %}<svg><use href="#i-target"></use></svg>
+            {% elif card.key == 'library' %}<svg><use href="#i-book"></use></svg>
+            {% endif %}
+          </div>
+          <div class="tool-status status-{{ card.status }}">
+            <span class="dot"></span>
+            {% if card.status == 'running' %}运行中
+            {% elif card.status == 'stopped' %}已停止
+            {% elif card.status == 'failed' %}异常
+            {% elif card.status == 'not_installed' %}未部署
+            {% else %}未知{% endif %}
+          </div>
+        </div>
+
+        <div class="tool-title">{{ card.title }}</div>
+        <div class="tool-subtitle">{{ card.subtitle }}</div>
+        <div class="tool-meta">
+          {% if card.last_access %}最后访问: {{ card.last_access.strftime('%m-%d %H:%M') }}
+          {% else %}从未访问{% endif %}
+        </div>
+
+        <div class="tool-actions">
+          <a class="tool-btn tool-btn-primary" href="/open/{{ card.key }}" target="_blank" rel="noopener">进入</a>
+          <button class="tool-btn" data-action="start" data-key="{{ card.key }}"
+            {% if card.status in ['running','not_installed'] %}disabled{% endif %}>启动</button>
+          <button class="tool-btn" data-action="stop" data-key="{{ card.key }}"
+            {% if card.status != 'running' %}disabled{% endif %}>停止</button>
+          <button class="tool-btn" data-action="restart" data-key="{{ card.key }}"
+            {% if card.status == 'not_installed' %}disabled{% endif %}>重启</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- 底部双面板 -->
+    <div class="row">
+      <div class="panel">
+        <div class="section-title">平台公告</div>
+        <ul>
+          <li>工具闲置 {{ idle_timeout }} 分钟后自动停止，节省内存</li>
+          <li>请优先使用 Chrome / Edge 浏览器访问</li>
+          <li>如有问题，联系 ori 或在企业微信搜索"ideon 支持"</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="section-title">使用提示</div>
+        <ul>
+          <li>首次进入工具需先点击"启动"按钮，等待 5~10 秒</li>
+          <li>点击侧边栏的工具名可快速定位到对应卡片</li>
+          <li>工具状态每 60 秒自动刷新，无需手动</li>
+        </ul>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ---------- KPI ----------
+fetch('/api/summary').then(r => r.json()).then(d => {
+  document.getElementById('kpi-total').textContent = d.total_tools;
+  document.getElementById('kpi-running').innerHTML =
+    `${d.running_count}<span class="unit">/ ${d.total_tools}</span>`;
+  document.getElementById('kpi-running-sub').textContent =
+    d.running_count === 0 ? '全部空闲' : `已启动 ${d.running_count} 个`;
+  document.getElementById('kpi-opens').textContent = d.total_opens;
+  document.getElementById('kpi-idle').innerHTML =
+    `${d.idle_timeout_minutes}<span class="unit">分钟</span>`;
+}).catch(() => {});
+
+// ---------- 启停/重启 ----------
+async function doAction(btn, action) {
+  const key = btn.dataset.key;
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = action === 'start' ? '启动中' : action === 'stop' ? '停止中' : '重启中';
+  try {
+    const res = await fetch(`/api/${action}/${key}`, {method: 'POST'});
+    if (!res.ok) {
+      const err = await res.json().then(d => d.detail).catch(() => '未知错误');
+      const cn = action === 'start' ? '启动' : action === 'stop' ? '停止' : '重启';
+      alert(cn + '失败: ' + err);
+      location.reload();
+      return;
+    }
+    if (action === 'stop') { setTimeout(() => location.reload(), 500); return; }
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const s = await fetch('/api/status').then(r => r.json());
+      if (s[key] && s[key].status === 'running') { location.reload(); return; }
+    }
+    alert('操作超时（30秒），请刷新检查');
+    location.reload();
+  } catch (e) {
+    alert('操作失败: ' + e);
+    location.reload();
+  }
+}
+
+document.querySelectorAll('.tool-btn[data-action]').forEach(btn => {
+  btn.addEventListener('click', () => doAction(btn, btn.dataset.action));
+});
+
+// ---------- 侧栏跳转（新窗口自动启动并跳转） ----------
+document.querySelectorAll('.nav-item[data-tool]').forEach(item => {
+  item.addEventListener('click', () => {
+    const key = item.dataset.tool;
+    if (!key) return;
+    window.open('/open/' + key, '_blank', 'noopener');
+  });
+});
+
+// ---------- 进入按钮：新窗口打开 + 防双击 ----------
+document.querySelectorAll('a[href^="/open/"]').forEach(a => {
+  a.addEventListener('click', () => {
+    a.textContent = '启动中…';
+    a.style.pointerEvents = 'none';
+    a.style.opacity = '0.6';
+  });
+});
+</script>
+</body>
+</html>

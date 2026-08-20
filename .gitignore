@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 虚拟环境
+venv/
+.venv/
+
+# 运行时数据
+*.db
+*.sqlite
+*.sqlite3
+
+# 日志
+logs/
+*.log
+
+# 备份文件
+*.bak
+*.bak.md
+DEPLOY-HANDOFF.v*.bak.md
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时 / 环境
+*.tmp
+*.swp
+.env

@@ -1,0 +1,28 @@
+[Unit]
+Description=ideon portal / routing page (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/ideon/portal
+# v2.2: 必须保留系统 PATH，否则 shutil.which("systemctl") 找不到 /usr/bin/systemctl
+# → HAS_SYSTEMCTL=False → 全部工具误报 not_installed（VM 部署实战教训）
+Environment="PATH=/opt/ideon/portal/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/opt/ideon/portal/venv/bin/uvicorn app:app \
+    --host 127.0.0.1 \
+    --port 8001 \
+    --workers 1 \
+    --proxy-headers \
+    --forwarded-allow-ips="127.0.0.1"
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+StandardOutput=append:/var/log/ideon/portal.log
+StandardError=append:/var/log/ideon/portal.err
+
+[Install]
+WantedBy=multi-user.target
