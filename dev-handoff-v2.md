@@ -271,6 +271,64 @@ VM AI 部署完成给我一份报告：
 
 ---
 
+## 9. UI 迭代日志（v3.1+，2026-09-04）
+
+### v3.1 — SVG icon 全套 + ⌘K Command Palette（commit 194e790）
+
+设计层大改。designUIv3.md §34 禁用 emoji/unicode + §11 要求全局 ⌘K。中台 icon 全套换 lucide SVG（14 个）+ 加 Command Palette。
+
+核心改动：
+- **ICON_SVG 前后端去重**：14 个 lucide SVG 字符串放后端 `app.py` 常量，`<body data-icons='...'>` 注入；前端 `ICONS = JSON.parse(document.body.dataset.icons)`，删 ICONS/ICON_KEY 硬编码
+- **`config.ICON_MAP` 单一来源**：tool_key → icon_key 映射，DRY
+- **`_tool_target()` 统一 helper**：4 处 target 拼接收敛
+- **5s 状态缓存**：`get_service_status` 包缓存层（`STATUS_CACHE_TTL`），共享 `api_status / api_summary / build_cards / idle_checker`
+- **status-pill 三套 → 单 `.status` + `.is-flat`**：tool card / palette 共用 `STATUS` 表 + `statusHtml()` helper
+- **⌘K Command Palette**：Liquid Glass 模态 + debounce 120ms + ↑↓ Enter Esc
+- **8 个 UI bug**：palette 默认显示 / 黑点 / 猫耳 / bell 红点 / metric icon 过大 / tool card 重排 / 卡宽 / hover 描边
+
+### v3.1.1 — UI 微调（commit 5202484）
+
+3 处调整：
+1. **Metric icon 内 SVG 缩到 20×20**（容器 40×40 不变，留 ~10px padding 防"填太满"）
+2. **Sidebar 折叠分组**：首页 / ▼ 工具入口 / 设置（disabled）/ 更新日志
+3. **Tool card 去副标题 + 尺寸对齐 best.html `.quick`**：138×104，icon 24px
+
+### v3.1.2 — 响应式 + Apple Design 动效（commit 0e6f3635981e）
+
+3 次迭代提交（c6919183 / 91431feb / c87251f / 0e6f3635）：
+
+**1. 响应式 5 断点（c6919183 + 91431feb）**
+
+| 断点 | 关键变化 |
+|---|---|
+| `≤1440` | 主区 padding 28/32，dashboard-grid 1.32/.82/1fr |
+| `≤1280` | 主区 26/28，metric-grid gap 12 |
+| `≤1024` | 主区 24/24，metric→3 列，dashboard→2 列（feedback 跨2），tool-card 128→104 |
+| `≤800` | 侧栏→72px（图标 only），metric→2 列，dashboard→1 列 |
+| `≤480` | tool-card→2 列（手机） |
+
+流体排版：`clamp(22px, 2.4vw, 32px)`（greeting h1）+ `clamp(24px, 2.8vw, 32px)`（metric-value）。
+
+**2. Apple Design 动效（c6919183）**
+
+| 规范 | 实现 |
+|---|---|
+| §1 Response（按下反馈） | `:active{transform:scale(.97)}` + 100ms |
+| §4 Springs（弹性曲线） | `cubic-bezier(.2,.8,.2,1)` 统一过渡 |
+| §7 Spatial（错落入场） | `@keyframes fade-up` 8px→0，.55s，metric 0/50/100/150ms → tool-card 180/230/280/330ms |
+| §14 Reduced motion | 默认尊重 `prefers-reduced-motion` |
+
+**3. 抄 best.html 交互 + tool-card 调方块（91431feb / c87251f / 0e6f3635）**
+
+| 修复 | 改动 |
+|---|---|
+| sidebar hover 看不到白 | sidebar 背景 `.94/.82` → `.58/.42`，hover 改 `#fff` + 阴影（明显加深） |
+| tool-card hover 弹不起 | 入场动画 `fade-up` 的 `animation-fill-mode:both` + `transform:translateY(0)` 永远覆盖 hover 的 `translateY(-3px)`（CSS 规范：animation 永远比 transition 优先）；改成 `fade-in` 只动 opacity，transform 留给 hover |
+| tool-card 改方块 | 108×108 → 128×128（≤1024 断点 120×120），gap 14，radius 18 |
+| 删冗余副标题 | 去掉「点击「进入」启动并跳转」 |
+
+---
+
 ## 10. VM 部署实战（2026-08-17，Mecha）
 
 ### 10.1 部署结果
