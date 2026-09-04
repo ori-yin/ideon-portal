@@ -132,7 +132,7 @@ main{margin-left:224px;width:calc(100% - 224px);padding:30px 38px 22px;max-width
  * Topbar (best.html style)
  * ============================================================ */
 .topbar{display:flex;align-items:flex-start;justify-content:space-between}
-.greeting h1{margin:0;font-size:31px;letter-spacing:-1px;font-weight:650}
+.greeting h1{margin:0;font-size:clamp(22px,2.4vw,32px);letter-spacing:-.8px;font-weight:650;line-height:1.15}
 .greeting p{margin:9px 0 0;color:#707782;font-size:14px}
 .actions{display:flex;align-items:center;gap:13px}
 .llm,.round-btn{
@@ -185,7 +185,7 @@ main{margin-left:224px;width:calc(100% - 224px);padding:30px 38px 22px;max-width
 .metric:nth-child(3) .metric-icon{background:linear-gradient(145deg,#f5efff,#eae2ff);color:#7758cf}
 .metric:nth-child(4) .metric-icon{background:linear-gradient(145deg,#f8f4ff,#eee6ff);color:#805ddd}
 .metric:nth-child(5) .metric-icon{background:linear-gradient(145deg,#f5faff,#e5efff);color:#2e73d5}
-.metric-value{font-size:32px;font-weight:650;letter-spacing:-1px;margin:12px 0 8px 52px;line-height:1}
+.metric-value{font-size:clamp(24px,2.8vw,32px);font-weight:650;letter-spacing:-.8px;margin:12px 0 8px 52px;line-height:1}
 .metric-note{font-size:12px;color:#7a828e;margin-left:52px}
 .metric-note .up{color:var(--green)}
 .metric-note .down{color:var(--red)}
@@ -309,6 +309,30 @@ main{margin-left:224px;width:calc(100% - 224px);padding:30px 38px 22px;max-width
 .toast.error{background:rgba(230,82,92,.95)}
 .toast.success{background:rgba(34,160,107,.95)}
 @keyframes toast-in{from{transform:translateY(-10px);opacity:0}to{transform:translateY(0);opacity:1}}
+/* Apple-style entrance: stagger fade-up + slightly overshoot bounce (damping ~0.85) */
+@keyframes fade-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Stagger entrance：metric / tool-card / activity / status-row 错开进场 */
+.metric,.tool-card,.activity,.status-row{
+  animation:fade-up .55s cubic-bezier(.2,.8,.2,1) both;
+}
+.metric:nth-child(1){animation-delay:0ms}
+.metric:nth-child(2){animation-delay:50ms}
+.metric:nth-child(3){animation-delay:100ms}
+.metric:nth-child(4){animation-delay:150ms}
+.tool-card:nth-child(1){animation-delay:180ms}
+.tool-card:nth-child(2){animation-delay:230ms}
+.tool-card:nth-child(3){animation-delay:280ms}
+.tool-card:nth-child(4){animation-delay:330ms}
+
+/* Apple §1 Response：press 反馈立刻、100ms，commit 也在 press 上 */
+:where(.nav,.tool-card,.round-btn,.llm):active{transform:scale(.97)}
+:where(.nav,.tool-card,.round-btn,.llm){
+  transition:transform 100ms cubic-bezier(.2,.8,.2,1);
+  will-change:transform;
+}
+.metric{transition:transform 100ms cubic-bezier(.2,.8,.2,1),box-shadow 100ms}
+.metric:active{transform:scale(.99)}
 
 /* ============================================================
  * Footer
@@ -388,16 +412,34 @@ footer{text-align:center;color:#89909a;font-size:12px;padding:22px 0 0;margin-to
   .palette-panel{width:100%;max-width:calc(100vw - 32px)}
 }
 @media(prefers-reduced-motion:reduce){
-  .palette-panel{animation:none}
+  .palette-panel,.metric,.tool-card,.activity,.status-row{animation:none !important}
+  :where(.nav,.tool-card,.round-btn,.llm):active{transform:none}
 }
 
 /* ============================================================
  * Responsive
+ *
+ * 设计基准 1920×1080（designUIv3 §57）：
+ * - 1440+：完整布局（4 列 metric / 3 列 dashboard）
+ * - 1280-1439：dashboard 3 列紧凑，metric 仍 4 列
+ * - 1024-1279：小笔记本，metric 3 列 + dashboard 2 列
+ * - 800-1023：metric 2 列 + dashboard 1 列 + sidebar compact 72px
+ * - <800：metric 2 列 + dashboard 1 列 + sidebar compact + tool 1 列
  * ============================================================ */
-@media(max-width:1200px){
+@media(max-width:1440px){
+  main{padding:28px 32px 22px}
+  .dashboard-grid{grid-template-columns:1.32fr .82fr 1fr}
+}
+@media(max-width:1280px){
+  main{padding:26px 28px 20px}
+  .metric-grid{gap:12px}
+}
+@media(max-width:1024px){
+  main{padding:24px 24px 18px}
   .metric-grid{grid-template-columns:repeat(3,1fr)}
   .dashboard-grid{grid-template-columns:1fr 1fr}
   .panel-feedback{grid-column:span 2}
+  .quick-grid{grid-template-columns:repeat(auto-fit,128px)}
 }
 @media(max-width:800px){
   .sidebar{width:72px;padding:20px 9px}
@@ -407,14 +449,13 @@ footer{text-align:center;color:#89909a;font-size:12px;padding:22px 0 0;margin-to
   .profile{justify-content:center;padding-left:0;padding-right:0}
   main{margin-left:72px;width:calc(100% - 72px);padding:22px 15px}
   .topbar{align-items:flex-start}
-  .greeting h1{font-size:25px}
   .actions .round-btn:nth-child(3){display:none}
   .metric-grid{grid-template-columns:1fr 1fr}
   .dashboard-grid{grid-template-columns:1fr}
   .panel-feedback{grid-column:auto}
 }
 @media(max-width:480px){
-  .tool-grid{grid-template-columns:1fr}
+  .quick-grid{grid-template-columns:repeat(2,1fr)}
 }
 </style>
 </head>
