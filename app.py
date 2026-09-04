@@ -5,6 +5,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 import urllib.parse
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -12,17 +13,68 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import sqlite3
 
-from config import TOOLS, IDLE_TIMEOUT_MINUTES, CHECK_INTERVAL_SECONDS, DB_PATH, PORTAL_PORT
+from config import TOOLS, ICON_MAP, IDLE_TIMEOUT_MINUTES, CHECK_INTERVAL_SECONDS, DB_PATH, PORTAL_PORT, STATUS_CACHE_TTL
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+# v3.1：SVG icon 字符串（Jinja filter 渲染工具卡图标用）
+# 路径来自 lucide 库 + mcd_ai_content_platform_ui_v3.html，保持 viewBox="0 0 24 24"
+ICON_SVG = {
+    "home": '<svg viewBox="0 0 24 24" class="icon"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>',
+    "pencil": '<svg viewBox="0 0 24 24" class="icon"><path d="m4 20 4.5-1 10-10a2.8 2.8 0 0 0-4-4l-10 10Z"/><path d="m13 6 5 5"/></svg>',
+    "shield-check": '<svg viewBox="0 0 24 24" class="icon"><path d="M12 3 4 6v5c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6Z"/><path d="m9 12 2 2 4-4"/></svg>',
+    "list-checks": '<svg viewBox="0 0 24 24" class="icon"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></svg>',
+    "bar-chart-3": '<svg viewBox="0 0 24 24" class="icon"><path d="M4 20V10M9 20V4M14 20v-7M19 20V7"/></svg>',
+    "refresh-ccw": '<svg viewBox="0 0 24 24" class="icon"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v6h-6"/></svg>',
+    "settings": '<svg viewBox="0 0 24 24" class="icon"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>',
+    "trending-up": '<svg viewBox="0 0 24 24" class="icon"><path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M17 7h5v5"/></svg>',
+    "grid-3x3": '<svg viewBox="0 0 24 24" class="icon"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>',
+    "activity": '<svg viewBox="0 0 24 24" class="icon"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+    "bell": '<svg viewBox="0 0 24 24" class="icon"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+    "lightbulb": '<svg viewBox="0 0 24 24" class="icon"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>',
+    "chevron-down": '<svg viewBox="0 0 24 24" class="icon"><path d="m6 9 6 6 6-6"/></svg>',
+    "search": '<svg viewBox="0 0 24 24" class="icon"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+}
+
+
+def _icon_svg(icon_key: str) -> str:
+    """Jinja filter: SVG icon key → SVG 字符串。模板 `{{ 'pencil' | icon_svg | safe }}`。
+
+    build_cards() 已把 tool_key → icon_key resolve 成 `icon` 字段，
+    模板直接读 `t.icon` 即可，不需要再传 tool_key。
+    """
+    return ICON_SVG.get(icon_key or "", ICON_SVG["grid-3x3"])
+
+
+templates.env.filters["icon_svg"] = _icon_svg
+
+
+def _tool_target(tool_key: str, *, via_loading: bool = False) -> str:
+    """跳转 URL：dev 模式用绝对端口 URL，VM 模式用 path_prefix（或 /open/key 走中转页触发启动）。"""
+    tool = TOOLS[tool_key]
+    if not HAS_SYSTEMCTL and tool.get("dev_port"):
+        return f"http://127.0.0.1:{tool['dev_port']}/"
+    return f"/open/{tool_key}" if via_loading else tool["path_prefix"]
+
+
+# 状态缓存：api_status / api_summary / api_tools/search / build_cards / idle_checker 共享
+# 防 N+1 探活；TTL 在 config.py（前端 setInterval 同步）
+_STATUS_CACHE: dict[str, tuple[float, str]] = {}
+
 HAS_SYSTEMCTL = shutil.which("systemctl") is not None
-_dev_procs: dict[str, subprocess.Popen] = {}  # tool_key -> subprocess（本地开发模式）
+# dev_procs: tool_key -> (Popen, log_file)；stop 时一起关，防 FD 泄漏
+_dev_procs: dict[str, tuple[subprocess.Popen, "object"]] = {}
+
+
+def _visible_tools() -> dict:
+    """过滤 hidden 工具（library 永远不进 UI / API 响应）。"""
+    return {k: t for k, t in TOOLS.items() if not t.get("hidden")}
 
 
 def is_port_open(port: int, host: str = "127.0.0.1") -> bool:
@@ -102,6 +154,21 @@ def service_exists(name: str) -> bool:
 
 
 def get_service_status(name: str) -> str:
+    """带缓存：api_status / api_summary / api_tools/search / build_cards / idle_checker 共享。
+
+    缓存命中直接返回；miss 时跑探活（最多 5 tool 同时 miss，5s 内仅 1 次 N+1）。
+    不用锁：subprocess.run 单 tool 5s timeout，FastAPI 单 worker 下不会卡死 event loop
+    （open_tool/loading_tool 显式用 asyncio.to_thread 包装）。
+    """
+    hit = _STATUS_CACHE.get(name)
+    if hit and time.time() - hit[0] < STATUS_CACHE_TTL:
+        return hit[1]
+    result = _probe_service_status(name)
+    _STATUS_CACHE[name] = (time.time(), result)
+    return result
+
+
+def _probe_service_status(name: str) -> str:
     if HAS_SYSTEMCTL:
         try:
             if not service_exists(name):
@@ -110,6 +177,8 @@ def get_service_status(name: str) -> str:
                 ["systemctl", "is-active", name], capture_output=True, text=True, timeout=5
             )
             state = r.stdout.strip()
+            if not state:
+                return "unknown"
             if state == "active":
                 return "running"
             if state == "failed":
@@ -120,9 +189,11 @@ def get_service_status(name: str) -> str:
                 ).stdout.strip()
                 return "stopped" if en == "enabled" else "failed"
             return "unknown"
-        except (FileNotFoundError, Exception):
-            pass
-    # 本地开发模式：探测端口
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return "unknown"
+        except Exception:
+            return "unknown"
+    # 本地开发模式：探测端口（永远不会进 systemd 异常分支）
     pair = _tool_for_service(name)
     if pair and "dev_port" in pair[1]:
         return "running" if is_port_open(pair[1]["dev_port"]) else "stopped"
@@ -147,13 +218,17 @@ def start_dev(tool_key: str) -> tuple[bool, str]:
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         log_dir = BASE_DIR / "logs"
         log_dir.mkdir(exist_ok=True)
+        # 用 context manager 关 FD；存到 _dev_procs 给 stop_dev 用
         log_file = open(log_dir / f"{tool_key}.log", "ab")
-        proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, **kwargs)
-        _dev_procs[tool_key] = proc
-        # 短延迟让进程有失败机会
-        import time
-        time.sleep(0.3)
+        try:
+            proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, **kwargs)
+            _dev_procs[tool_key] = (proc, log_file)
+        except Exception:
+            log_file.close()
+            raise
+        time.sleep(0.3)  # 短延迟让进程有失败机会
         if proc.poll() is not None:
+            stop_dev(tool_key)  # 收尾关 log_file
             return False, f"进程立即退出，退出码 {proc.returncode}"
         return True, "已启动，等待端口"
     except Exception as e:
@@ -161,9 +236,10 @@ def start_dev(tool_key: str) -> tuple[bool, str]:
 
 
 def stop_dev(tool_key: str) -> tuple[bool, str]:
-    proc = _dev_procs.get(tool_key)
-    if not proc:
+    entry = _dev_procs.pop(tool_key, None)
+    if not entry:
         return True, "未在追踪"
+    proc, log_file = entry
     try:
         proc.terminate()
         try:
@@ -174,7 +250,10 @@ def stop_dev(tool_key: str) -> tuple[bool, str]:
     except Exception as e:
         return False, str(e)
     finally:
-        _dev_procs.pop(tool_key, None)
+        try:
+            log_file.close()
+        except Exception:
+            pass
     return True, "已停止"
 
 
@@ -218,17 +297,36 @@ def get_total_opens() -> int:
         return 0
 
 
+def relative_time(dt) -> str:
+    """把 datetime 转成「N 分钟前 / N 小时前 / N 天前 / 刚刚」。"""
+    delta = datetime.now() - dt
+    if delta.days > 0:
+        return f"{delta.days} 天前"
+    hours = delta.seconds // 3600
+    if hours > 0:
+        return f"{hours} 小时前"
+    minutes = delta.seconds // 60
+    if minutes > 0:
+        return f"{minutes} 分钟前"
+    return "刚刚"
+
+
 def build_cards():
-    return [
+    """返回 (cards, hidden_count)。hidden_count 让模板不需要 +1 magic number。"""
+    visible = _visible_tools()
+    cards = [
         {
             "key": k,
             "title": t["title"],
             "subtitle": t["subtitle"],
             "status": get_service_status(t["service"]),
             "last_access": get_last_access(k),
+            "icon": ICON_MAP.get(k, "grid-3x3"),
         }
-        for k, t in TOOLS.items()
+        for k, t in visible.items()
     ]
+    hidden_count = len(TOOLS) - len(visible)
+    return cards, hidden_count
 
 
 @asynccontextmanager
@@ -246,18 +344,26 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ideon 中台", lifespan=lifespan)
 
+# 静态资源（loading.gif 等）
+STATIC_DIR = BASE_DIR / "static"
+STATIC_DIR.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 
 @app.get("/")
 async def index(request: Request):
     need = request.query_params.get("need_start")
     err = request.query_params.get("err")
     need_title = (TOOLS.get(need) or {}).get("title", "") if need else ""
+    cards, hidden_count = build_cards()
     return templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
             "request": request,
-            "cards": build_cards(),
+            "cards": cards,
+            "hidden_count": hidden_count,
+            "ICON_SVG": ICON_SVG,
             "idle_timeout": IDLE_TIMEOUT_MINUTES,
             "need_start": need,
             "need_start_title": need_title,
@@ -269,7 +375,7 @@ async def index(request: Request):
 @app.get("/api/status")
 async def api_status():
     out = {}
-    for k, t in TOOLS.items():
+    for k, t in _visible_tools().items():
         try:
             la = get_last_access(k)
             out[k] = {
@@ -291,6 +397,7 @@ async def api_start(tool_key: str):
     ok, msg = systemctl_action(svc, "start")
     if not ok:
         raise HTTPException(500, f"start failed: {msg}")
+    _STATUS_CACHE.pop(svc, None)  # action 后失效缓存，避免 5s 内显示 stale 状态
     return {"ok": True, "service": svc}
 
 
@@ -302,6 +409,7 @@ async def api_stop(tool_key: str):
     ok, msg = systemctl_action(svc, "stop")
     if not ok:
         raise HTTPException(500, f"stop failed: {msg}")
+    _STATUS_CACHE.pop(svc, None)
     return {"ok": True, "service": svc}
 
 
@@ -315,6 +423,7 @@ async def api_restart(tool_key: str):
     ok, msg = systemctl_action(svc, "restart")
     if not ok:
         raise HTTPException(500, f"restart failed: {msg}")
+    _STATUS_CACHE.pop(svc, None)
     return {"ok": True, "service": svc}
 
 
@@ -333,22 +442,118 @@ async def api_summary():
     }
 
 
+@app.get("/api/recent")
+async def api_recent(limit: int = 10):
+    """最近访问事件：基于 access_log.last_access_at 倒序，过滤 hidden 工具。"""
+    items = []
+    for k, t in _visible_tools().items():
+        la = get_last_access(k)
+        if la:
+            items.append({
+                "tool_key": k,
+                "title": t["title"],
+                "icon": ICON_MAP.get(k, "grid-3x3"),
+                "last_access_at": la.isoformat(),
+                "relative": relative_time(la),
+            })
+    items.sort(key=lambda x: x["last_access_at"], reverse=True)
+    return items[:limit]
+
+
+@app.get("/api/tools/search")
+async def api_tools_search(q: str = "", limit: int = 10):
+    """工具搜索/列表（v3.1 ⌘K Command Palette 用）。
+
+    模糊匹配 key/title/subtitle；跳过 hidden 工具。
+    q 超长截断到 50，limit clamp 到 1-20。
+    """
+    try:
+        limit = max(1, min(int(limit or 10), 20))
+    except (TypeError, ValueError):
+        limit = 10
+    q_raw = (q or "")[:50]
+    q_low = q_raw.lower()
+    items = []
+    for k, t in TOOLS.items():
+        if t.get("hidden"):           # library 不进搜索
+            continue
+        title = t["title"]
+        subtitle = t.get("subtitle", "")
+        score = 0
+        if q_low:
+            if q_low in title.lower():
+                score = max(score, 100 - len(title))
+            if q_low in subtitle.lower():
+                score = max(score, 50)
+            if q_low in k.lower():
+                score = max(score, 25)
+        if q_low and score == 0:
+            continue
+        items.append({
+            "key": k,
+            "title": title,
+            "subtitle": subtitle,
+            "status": get_service_status(t["service"]),
+            "service": t["service"],
+            "path_prefix": t["path_prefix"],
+            "target": _tool_target(k, via_loading=True),
+            "icon": ICON_MAP.get(k, "grid-3x3"),
+            "_score": score,
+        })
+    items.sort(key=lambda x: (-x.pop("_score"), x["title"]))
+    return {"items": items[:limit], "total": len(items), "q": q_raw}
+
+
 @app.get("/api/debug/redirect/{tool_key}")
 async def debug_redirect(tool_key: str):
     """调试：显示 /open/ 实际会跳到哪个 URL。"""
     if tool_key not in TOOLS:
         raise HTTPException(404, "unknown tool")
     tool = TOOLS[tool_key]
-    if not HAS_SYSTEMCTL and tool.get("dev_port"):
-        target = f"http://127.0.0.1:{tool['dev_port']}/"
-    else:
-        target = tool["path_prefix"]
+    target = _tool_target(tool_key)
     return {
         "HAS_SYSTEMCTL": HAS_SYSTEMCTL,
         "dev_port": tool.get("dev_port"),
         "path_prefix": tool["path_prefix"],
         "target": target,
     }
+
+
+@app.get("/loading/{tool_key}")
+async def loading_tool(tool_key: str, request: Request):
+    """进入工具的中转页：触发启动 + 显示居中 GIF，就绪后前端跳转。"""
+    if tool_key not in TOOLS:
+        raise HTTPException(404, "unknown tool")
+    svc = TOOLS[tool_key]["service"]
+    status = get_service_status(svc)
+
+    if status == "not_installed":
+        return RedirectResponse(url=f"/?need_start={tool_key}", status_code=303)
+
+    if status != "running":
+        ok, msg = systemctl_action(svc, "start")
+        if not ok:
+            return RedirectResponse(
+                url=f"/?need_start={tool_key}&err={urllib.parse.quote(f'启动失败: {msg}')}",
+                status_code=303,
+            )
+        # 轮询等待 systemd 就绪（至多 30s）；探测走 thread 防 event loop 阻塞
+        port = TOOLS[tool_key].get("dev_port") if not HAS_SYSTEMCTL else None
+        for _ in range(30):
+            await asyncio.sleep(1)
+            if HAS_SYSTEMCTL:
+                if await asyncio.to_thread(get_service_status, svc) == "running":
+                    break
+            elif port and await asyncio.to_thread(is_port_open, port):
+                break
+        # 不阻塞渲染：无论是否就绪，先给用户看 GIF，前端继续探测
+
+    touch_access(tool_key)
+    target = _tool_target(tool_key)
+    return templates.TemplateResponse(
+        "loading.html",
+        {"request": request, "target": target},
+    )
 
 
 @app.get("/open/{tool_key}")
@@ -369,14 +574,14 @@ async def open_tool(tool_key: str):
                 url=f"/?need_start={tool_key}&err={urllib.parse.quote(f'启动失败: {msg}')}",
                 status_code=303,
             )
-        # 轮询等待（systemd 看 is-active，开发模式看端口）
+        # 轮询等待（systemd 看 is-active，开发模式看端口）；探测走 thread 防 event loop 阻塞
         port = TOOLS[tool_key].get("dev_port") if not HAS_SYSTEMCTL else None
         for _ in range(30):
             await asyncio.sleep(1)
             if HAS_SYSTEMCTL:
-                if get_service_status(svc) == "running":
+                if await asyncio.to_thread(get_service_status, svc) == "running":
                     break
-            elif port and is_port_open(port):
+            elif port and await asyncio.to_thread(is_port_open, port):
                 break
         else:
             return RedirectResponse(
@@ -386,10 +591,7 @@ async def open_tool(tool_key: str):
 
     touch_access(tool_key)
     # 本地开发模式：跳绝对 URL（带 dev_port）；VM 模式：跳相对路径（nginx 反代）
-    if not HAS_SYSTEMCTL and TOOLS[tool_key].get("dev_port"):
-        target = f"http://127.0.0.1:{TOOLS[tool_key]['dev_port']}/"
-    else:
-        target = TOOLS[tool_key]["path_prefix"]
+    target = _tool_target(tool_key)
     return RedirectResponse(url=target, status_code=303)
 
 
@@ -399,6 +601,9 @@ async def idle_checker():
         try:
             cutoff = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
             for k, t in TOOLS.items():
+                # always-on 工具不参与闲置回收
+                if t.get("persistent"):
+                    continue
                 last = get_last_access(k)
                 if last and last < cutoff and get_service_status(t["service"]) == "running":
                     systemctl_action(t["service"], "stop")
