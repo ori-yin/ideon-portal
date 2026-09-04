@@ -23,6 +23,11 @@ from config import TOOLS, ICON_MAP, IDLE_TIMEOUT_MINUTES, CHECK_INTERVAL_SECONDS
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+# v3.0: 8530 在独立端口 8530 上跑自己的 app，portal 不挂载它。portal 只生成跳转链接。
+# 8530 进程：cd C:\ideon\mcd-ai-content-platform\web && uvicorn app:app --port 8530
+# portal 这边：首页工具卡用绝对 URL http://localhost:8530/... target=_blank 新开标签
+# 这里不做任何导入，避免 portal/8530 之间 sys.path 互相污染
+
 # v3.1：SVG icon 字符串（Jinja filter 渲染工具卡图标用）
 # 路径来自 lucide 库 + mcd_ai_content_platform_ui_v3.html，保持 viewBox="0 0 24 24"
 ICON_SVG = {
@@ -40,6 +45,7 @@ ICON_SVG = {
     "lightbulb": '<svg viewBox="0 0 24 24" class="icon"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>',
     "chevron-down": '<svg viewBox="0 0 24 24" class="icon"><path d="m6 9 6 6 6-6"/></svg>',
     "search": '<svg viewBox="0 0 24 24" class="icon"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+    "wand-sparkles": '<svg viewBox="0 0 24 24" class="icon"><path d="m15 4 3 3"/><path d="M9 13 4 18"/><path d="m15 4-3 3 6 6 3-3z"/><path d="m19 9 1 1"/><path d="m3 19 2 2"/><path d="m13 4-1 1"/><path d="m21 16-1 1"/><path d="m5 6 1 1"/></svg>',
 }
 
 
@@ -58,6 +64,13 @@ templates.env.filters["icon_svg"] = _icon_svg
 def _tool_target(tool_key: str, *, via_loading: bool = False) -> str:
     """跳转 URL：dev 模式用绝对端口 URL，VM 模式用 path_prefix（或 /open/key 走中转页触发启动）。"""
     tool = TOOLS[tool_key]
+    # v2.2 internal 类型：portal 自身的路由，直接走 path_prefix（前端 target=_blank 新开标签）
+    if tool.get("type") == "internal":
+        return tool["path_prefix"]
+    # v3.0: path_prefix 已是绝对 URL（如 http://localhost:8530/studio），直接用
+    pf = tool.get("path_prefix", "")
+    if pf.startswith("http://") or pf.startswith("https://"):
+        return pf
     if not HAS_SYSTEMCTL and tool.get("dev_port"):
         return f"http://127.0.0.1:{tool['dev_port']}/"
     return f"/open/{tool_key}" if via_loading else tool["path_prefix"]
@@ -312,16 +325,21 @@ def relative_time(dt) -> str:
 
 
 def build_cards():
-    """返回 (cards, hidden_count)。hidden_count 让模板不需要 +1 magic number。"""
+    """返回 (cards, hidden_count)。hidden_count 让模板不需要 +1 magic number。
+
+    v2.2：internal 类型 status 强制 running，external_blank=false；模板据此决定 target=_blank
+    """
     visible = _visible_tools()
     cards = [
         {
             "key": k,
             "title": t["title"],
             "subtitle": t["subtitle"],
-            "status": get_service_status(t["service"]),
+            "status": "running" if t.get("type") == "internal" else get_service_status(t["service"]),
             "last_access": get_last_access(k),
             "icon": ICON_MAP.get(k, "grid-3x3"),
+            "external_blank": bool(t.get("external_blank")) or t.get("type") == "internal",
+            "target_url": _tool_target(k, via_loading=t.get("type") != "internal"),
         }
         for k, t in visible.items()
     ]
@@ -344,10 +362,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ideon 中台", lifespan=lifespan)
 
+# v2.2: 把 templates / ICON_SVG 挂在 app.state，tool_routes 用
+app.state.templates = templates
+app.state.ICON_SVG = ICON_SVG
+
 # 静态资源（loading.gif 等）
 STATIC_DIR = BASE_DIR / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# v3.0: 8530 跑在独立端口，portal 不挂载。跳转链接由 config.py + _tool_target 走绝对 URL。
 
 
 @app.get("/")
@@ -378,6 +402,10 @@ async def api_status():
     for k, t in _visible_tools().items():
         try:
             la = get_last_access(k)
+            # v2.2 internal 类型永远 running，省掉 systemd 探活
+            if t.get("type") == "internal":
+                out[k] = {"status": "running", "last_access": la.isoformat() if la else None}
+                continue
             out[k] = {
                 "status": get_service_status(t["service"]),
                 "last_access": la.isoformat() if la else None,
@@ -489,15 +517,18 @@ async def api_tools_search(q: str = "", limit: int = 10):
                 score = max(score, 25)
         if q_low and score == 0:
             continue
+        # v2.2 internal 类型 palette 也走新标签页（target + external_blank）
+        is_internal = t.get("type") == "internal"
         items.append({
             "key": k,
             "title": title,
             "subtitle": subtitle,
-            "status": get_service_status(t["service"]),
+            "status": "running" if is_internal else get_service_status(t["service"]),
             "service": t["service"],
             "path_prefix": t["path_prefix"],
-            "target": _tool_target(k, via_loading=True),
+            "target": _tool_target(k, via_loading=not is_internal),
             "icon": ICON_MAP.get(k, "grid-3x3"),
+            "external_blank": is_internal,
             "_score": score,
         })
     items.sort(key=lambda x: (-x.pop("_score"), x["title"]))
@@ -601,8 +632,8 @@ async def idle_checker():
         try:
             cutoff = datetime.now() - timedelta(minutes=IDLE_TIMEOUT_MINUTES)
             for k, t in TOOLS.items():
-                # always-on 工具不参与闲置回收
-                if t.get("persistent"):
+                # always-on / internal 类型不参与闲置回收（internal 是 portal 自身页面）
+                if t.get("persistent") or t.get("type") == "internal":
                     continue
                 last = get_last_access(k)
                 if last and last < cutoff and get_service_status(t["service"]) == "running":
