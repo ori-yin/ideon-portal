@@ -84,6 +84,34 @@ nav{display:grid;gap:7px}
 .nav.disabled{cursor:not-allowed;opacity:.55}
 .nav.disabled:hover{background:transparent;color:#566171}
 
+/* sidebar 折叠分组（工具入口下放全部 cards，未来加工具直接追加） */
+.nav-group{margin:4px 0}
+.nav-group-head{
+  height:51px;border-radius:15px;display:flex;align-items:center;gap:14px;
+  padding:0 16px;color:#566171;background:transparent;border:0;
+  font:inherit;font-size:14px;cursor:pointer;user-select:none;
+  width:100%;text-align:left;transition:.2s;
+}
+.nav-group-head:hover{background:rgba(255,255,255,.68);color:#245fae}
+.nav-group-head .nav-icon{color:inherit}
+.nav-group-chevron{
+  width:14px;height:14px;margin-left:auto;color:#86868b;flex-shrink:0;
+  transition:transform .25s cubic-bezier(.2,.8,.2,1);
+}
+.nav-group-head[aria-expanded="false"] .nav-group-chevron{transform:rotate(-90deg)}
+.nav-group-list{display:flex;flex-direction:column;gap:2px;padding:6px 0 8px 14px}
+.nav-group-head[aria-expanded="false"]+.nav-group-list{display:none}
+.nav-group-list .nav{
+  height:42px;border-radius:12px;font-size:13.5px;padding:0 14px;
+  color:#6e7682;font-weight:500;
+}
+.nav-group-list .nav .nav-icon{width:18px;height:18px}
+.nav-group-list .nav:hover{background:rgba(255,255,255,.68);color:#245fae}
+.nav-group-list .nav.active{
+  background:linear-gradient(90deg,rgba(234,242,255,.95),rgba(225,234,249,.68));
+  color:#2368c5;font-weight:600;
+}
+
 .profile{margin-top:auto;display:flex;align-items:center;gap:11px;padding:15px 8px;border-top:1px solid rgba(60,60,67,.06)}
 .avatar{
   width:42px;height:42px;border-radius:50%;
@@ -151,6 +179,8 @@ main{margin-left:224px;width:calc(100% - 224px);padding:30px 38px 22px;max-width
   background:linear-gradient(145deg,#f6faff,#e7f0ff);color:#2976da;
   box-shadow:0 6px 14px rgba(48,104,195,.08);
 }
+.metric-icon .icon{width:20px;height:20px}  /* 容器 40 内显 20，留 ~10px padding 防"填太满" */
+}
 .metric:nth-child(2) .metric-icon{background:linear-gradient(145deg,#fff6f5,#ffe8e5);color:#ec625b}
 .metric:nth-child(3) .metric-icon{background:linear-gradient(145deg,#f5efff,#eae2ff);color:#7758cf}
 .metric:nth-child(4) .metric-icon{background:linear-gradient(145deg,#f8f4ff,#eee6ff);color:#805ddd}
@@ -167,16 +197,17 @@ main{margin-left:224px;width:calc(100% - 224px);padding:30px 38px 22px;max-width
 .section-head h2{margin:0;font-size:20px;letter-spacing:-.3px;font-weight:600}
 .section-head .sub{color:var(--muted);font-size:12.5px;margin-top:3px}
 
-.quick-grid{display:grid;grid-template-columns:repeat(auto-fit,170px);gap:10px;justify-content:start}
+.quick-grid{display:grid;grid-template-columns:repeat(auto-fit,138px);gap:10px;justify-content:start}
 .tool-card{
-  display:flex;flex-direction:column;align-items:center;gap:6px;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
   background:rgba(248,250,253,.72);
   border:1px solid rgba(255,255,255,.9);
-  border-radius:14px;
-  padding:13px 6px 11px;
+  border-radius:16px;
+  padding:17px 8px 14px;
   text-align:center;
   color:inherit;text-decoration:none;
   cursor:pointer;
+  min-height:104px;
   transition:.18s;
 }
 .tool-card:hover{
@@ -185,11 +216,10 @@ main{margin-left:224px;width:calc(100% - 224px);padding:30px 38px 22px;max-width
   box-shadow:0 9px 20px rgba(31,47,69,.05);
 }
 .tc-icon{
-  width:22px;height:22px;color:#2d73d2;
+  width:24px;height:24px;color:#2d73d2;
   display:grid;place-items:center;line-height:1;
 }
-.tc-title{font-size:13px;font-weight:600;letter-spacing:-.1px;line-height:1.2;margin-top:4px}
-.tc-subtitle{color:#7c8591;font-size:10.5px;line-height:1.35;min-height:14px}
+.tc-title{font-size:14px;font-weight:600;letter-spacing:-.1px;line-height:1.2;margin-top:5px}
 
 /* 状态徽标：.status 默认带背景（palette 用），加 .is-flat 去掉背景（tool card 用） */
 .status{
@@ -404,11 +434,20 @@ footer{text-align:center;color:#89909a;font-size:12px;padding:22px 0 0;margin-to
 
     <nav>
       <a class="nav active" href="/"><span class="icon nav-icon">{{ 'home' | icon_svg | safe }}</span><span>首页</span></a>
-      <a class="nav disabled" href="#" title="即将上线"><span class="icon nav-icon">{{ 'pencil' | icon_svg | safe }}</span><span>内容工坊</span></a>
-      <a class="nav disabled" href="#" title="即将上线"><span class="icon nav-icon">{{ 'shield-check' | icon_svg | safe }}</span><span>内容诊断</span></a>
-      <a class="nav disabled" href="#" title="即将上线"><span class="icon nav-icon">{{ 'activity' | icon_svg | safe }}</span><span>内容预测</span></a>
-      <a class="nav disabled" href="#" title="即将上线"><span class="icon nav-icon">{{ 'bar-chart-3' | icon_svg | safe }}</span><span>历史洞察</span></a>
-      <a class="nav disabled" href="#" title="即将上线"><span class="icon nav-icon">{{ 'trending-up' | icon_svg | safe }}</span><span>结果回流</span></a>
+
+      <div class="nav-group">
+        <button type="button" class="nav-group-head" aria-expanded="true">
+          <span class="icon nav-icon">{{ 'list-checks' | icon_svg | safe }}</span>
+          <span>工具入口</span>
+          <svg class="nav-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="nav-group-list">
+          {% for c in cards %}
+          <a class="nav nav-child" href="/open/{{ c.key }}"><span class="icon nav-icon">{{ c.icon | icon_svg | safe }}</span><span>{{ c.title }}</span></a>
+          {% endfor %}
+        </div>
+      </div>
+
       <a class="nav disabled" href="#" title="即将上线"><span class="icon nav-icon">{{ 'settings' | icon_svg | safe }}</span><span>设置中心</span></a>
       <a class="nav" href="/changelog"><span class="icon nav-icon">{{ 'refresh-ccw' | icon_svg | safe }}</span><span>更新日志</span></a>
     </nav>
@@ -467,7 +506,6 @@ footer{text-align:center;color:#89909a;font-size:12px;padding:22px 0 0;margin-to
         <a class="tool-card" href="/open/{{ t.key }}" data-key="{{ t.key }}" id="card-{{ t.key }}">
           <div class="tc-icon icon">{{ t.icon | icon_svg | safe }}</div>
           <b class="tc-title">{{ t.title }}</b>
-          <small class="tc-subtitle">{{ t.subtitle }}</small>
           {% if t.status == 'running' %}<span class="status is-flat running"><span class="dot"></span>运行中</span>
           {% elif t.status == 'failed' %}<span class="status is-flat failed"><span class="dot"></span>启动失败</span>
           {% elif t.status == 'maintenance' %}<span class="status is-flat maintenance"><span class="dot"></span>维护中</span>
@@ -621,6 +659,14 @@ function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 refreshStatus();
 refreshActivity();
 setInterval(refreshStatus, 5000);
+
+// sidebar 折叠分组（默认展开；未来工具增多可折叠）
+document.querySelectorAll('.nav-group-head').forEach(h=>{
+  h.addEventListener('click', ()=>{
+    const open = h.getAttribute('aria-expanded') !== 'false';
+    h.setAttribute('aria-expanded', String(!open));
+  });
+});
 
 // v3.1 Command Palette
 const Palette = (function(){
