@@ -327,6 +327,26 @@ VM AI 部署完成给我一份报告：
 | tool-card 改方块 | 108×108 → 128×128（≤1024 断点 120×120），gap 14，radius 18 |
 | 删冗余副标题 | 去掉「点击「进入」启动并跳转」 |
 
+### v3.1.3 — UI Polish（commit bf0979794549）✅ 定稿
+
+基于 AI prompt 11 节做小幅精修（不重设计、不动 Layout）：
+
+| 改动 | 实现 |
+|---|---|
+| metric hover 微浮 | `translateY(-1px)` + 阴影 `0 14px 30px rgba(28,43,65,.075)`，比 tool-card 的 -3px 弱，形成轻/重层级差 |
+| panel-feedback 紧凑化 | padding 23→20；内部 feedback 行 padding 14→13 / margin 10→9；b 字号 14→13.5，small 12→11.5；panel-head h2 font-weight 600→550 |
+| 三个 panel 视觉密度差 | 左「最近活动」/ 中「系统状态」保持 list 风格（信息密度高），右「使用提示」卡片堆叠风（更轻），不再是 3 个长得一模一样 |
+
+### 设计规范归档
+
+仓库根目录加 2 份设计规范（OneDrive 设计参考同步进来）：
+- `designUIv3.md` — "Calm Intelligence" 主规范（80% Apple + 20% Liquid Glass）
+- `Apple Design动效.md` — 动效规范（响应、弹簧、空间、减弱动画 4 大节）
+
+### handoff 清理
+
+删 `VMHandoff.md`（Mecha 8/20 写的全流程复盘）——section 10「VM 部署实战」已是摘要版，全流程坑细节不再需要展开阅读。
+
 ---
 
 ## 10. VM 部署实战（2026-08-17，Mecha）
