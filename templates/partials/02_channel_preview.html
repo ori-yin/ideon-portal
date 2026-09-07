@@ -1,0 +1,35 @@
+{# partials/02_channel_preview.html — 单条文案预览（APP Push / 企微1v1 / 短信 / 其他）
+
+依赖：
+  - channel（str）
+  - title（str，可能为空）
+  - body（str）
+#}
+
+{% if channel == 'APP Push' %}
+<div class="preview-card">
+  <div class="pv-meta">McDonald's · 现在</div>
+  <div class="pv-title">{{ title or '（无标题）' }}</div>
+  <div class="pv-body">{{ body }}</div>
+  <div class="pv-meta">APP Push · 点击查看</div>
+</div>
+{% elif channel == '企微1v1' %}
+<div class="wechat-bubble-wrap">
+  <div class="wc-avatar"><img src="/static/img/mcdonalds.svg" alt="M" class="wc-m"></div>
+  <div class="wechat-bubble">
+    <div class="wc-name">麦当劳会员服务</div>
+    <div class="wc-title">{{ title or '（无标题）' }}</div>
+    <div class="wc-body">{{ body }}</div>
+    <div class="wc-meta">今天 · 已送达</div>
+  </div>
+</div>
+{% elif channel == '短信' %}
+{% set seg = ((body|length) + 69) // 70 %}
+<div class="preview-card">
+  <div class="pv-meta">106xxxxxxxx</div>
+  <div class="pv-body">{{ body }}</div>
+  <div class="pv-meta">短信 · {{ body|length }} 字 / {{ seg if seg > 0 else 1 }} 段</div>
+</div>
+{% else %}
+<div class="warning-banner">该渠道预览待实现</div>
+{% endif %}

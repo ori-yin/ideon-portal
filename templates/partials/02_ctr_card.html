@@ -1,0 +1,35 @@
+{# partials/02_ctr_card.html — 单条文案 CTR 卡片
+
+依赖：ctr（dict，含 result_type/pred_ctr/baseline_ctr/confidence/suggestion/error/label）
+#}
+
+{% if ctr is none %}
+<div class="warning-banner">CTR 参考：暂不可用</div>
+{% elif ctr.result_type == 'unavailable' %}
+<div class="warning-banner">CTR 参考：暂不可用；原因：{{ ctr.error or '无足够基准数据' }}</div>
+{% else %}
+<div class="kpi-tile">
+  <div class="label">状态：{{ ctr.label }}</div>
+  {% if ctr.pred_ctr is not none %}
+  <div class="value">{{ "%.2f"|format(ctr.pred_ctr * 100) }}%</div>
+  <div class="sub">预测 CTR</div>
+  {% endif %}
+  {% if ctr.baseline_ctr is not none %}
+  <div class="sub">历史基准：{{ "%.2f"|format(ctr.baseline_ctr * 100) }}%</div>
+  {% endif %}
+  {% if ctr.pred_ctr is not none and ctr.baseline_ctr is not none and ctr.baseline_ctr > 0 %}
+    {% set diff_pp = (ctr.pred_ctr - ctr.baseline_ctr) * 100 %}
+  <div class="sub">相对基准：{% if diff_pp >= 0 %}+{% endif %}{{ "%.2f"|format(diff_pp) }} 个百分点</div>
+  {% endif %}
+  {% if ctr.confidence is not none %}
+    {% set lvl = '低' %}
+    {% if ctr.confidence >= 0.75 %}{% set lvl = '高' %}
+    {% elif ctr.confidence >= 0.5 %}{% set lvl = '中' %}
+    {% endif %}
+  <div class="sub">置信度：{{ lvl }}（{{ "%.2f"|format(ctr.confidence) }}）</div>
+  {% endif %}
+  {% if ctr.suggestion %}
+  <div class="sub">建议：{{ ctr.suggestion }}</div>
+  {% endif %}
+</div>
+{% endif %}

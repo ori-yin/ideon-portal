@@ -1,0 +1,75 @@
+{# partials/02_rule_panel.html — 02 规则总览 + 规则项
+
+依赖：
+  - rule（dict 或 None，含 status/items/passes/warns/fails）
+  - diagnose（dict，含 score/grade/diag/problems）
+#}
+
+{% if rule is none %}
+<div class="empty-state">请先在左侧输入文案并点击「开始诊断」。</div>
+{% else %}
+  {% set status_label = {'pass':'全部通过','warn':'有提醒','fail':'存在阻断'}.get(rule.status, rule.status) %}
+  <div class="kpi-tile">
+    <div class="label">规则状态</div>
+    <div class="value">{{ status_label }}</div>
+    <div class="sub">通过 {{ rule.passes|length }} / 提醒 {{ rule.warns|length }} / 阻断 {{ rule.fails|length }}</div>
+  </div>
+  {% if rule.has_blocking %}
+  <div class="warning-banner"><b>存在阻断项</b>，请先修改后再次评估。</div>
+  {% endif %}
+
+  <div class="subsection-label">规则项</div>
+  {% for it in rule['items'] %}
+    {% set severity = it.severity %}
+  <div class="rule-item rule-{{ severity }}">
+    <span class="rule-icon">
+      {% if severity == 'pass' %}✓
+      {% elif severity == 'warn' %}!
+      {% else %}✗{% endif %}
+    </span>
+    <span class="rule-content">
+      <b>[{{ severity.upper() }}]</b> <b>{{ it.category }}</b>：{{ it.message }}
+      {% if it.suggestion %}<br><span class="rule-suggestion">建议：{{ it.suggestion }}</span>{% endif %}
+    </span>
+  </div>
+  {% endfor %}
+
+  {% if diagnose %}
+  <div class="subsection">
+    <div class="subsection-label">词语表现</div>
+    {% set score = diagnose.score %}
+    {% set grade = diagnose.grade or '—' %}
+    {% if score is not none %}
+    <div class="kpi-tile">
+      <div class="label">文案评分</div>
+      <div class="value">{{ score }} / 100 · {{ grade }}</div>
+    </div>
+    {% endif %}
+    {% set d = (diagnose.diag) or {} %}
+    {% set hit = (d.hit_words) or [] %}
+    {% set miss = ((d.miss_top) or [])[:8] %}
+    {% if hit %}<div class="stat-line">命中高效词：{{ hit | join('、') }}</div>{% endif %}
+    {% if miss %}<div class="stat-line">未出现的高频高 CTR 词：{{ miss | join('、') }}</div>{% endif %}
+    {% if not hit and not miss %}<div class="stat-line stat-line-muted">无历史高频词数据（需上传历史计划）</div>{% endif %}
+
+    {% set problems = (diagnose.problems) or [] %}
+    {% if problems %}
+    <div class="subsection subsection-tight">
+      {% for p in problems[:5] %}
+        {% set msg = p.label or '' %}
+        {% set so_what = p.so_what or '' %}
+        {% set sug = p.suggested or '' %}
+      <div class="rule-item rule-warn">
+        <span class="rule-icon">!</span>
+        <span class="rule-content">
+          <b>{{ msg }}</b>
+          {% if so_what %}<br><span class="rule-suggestion">{{ so_what }}</span>{% endif %}
+          {% if sug %}<br><span class="rule-suggestion">建议：{{ sug }}</span>{% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+{% endif %}

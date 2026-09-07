@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}McD AI 内容平台{% endblock %}</title>
+
+  <!-- Favicon：复用 web/static/img/mcdonalds.svg（与左上角 M 图同文件，视觉一致） -->
+  <link rel="icon" type="image/svg+xml" href="/static/img/mcdonalds.svg?v=20260903fv2" />
+
+  <!-- 全局样式（从 v2.html 抽出来的 CSS） -->
+  <link rel="stylesheet" href="/static/css/style.css?v=20260902wf" />
+
+  <!-- HTMX CDN -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+  <script>
+  (function () {
+    if ('scrollRestoration' in history) {
+      try { history.scrollRestoration = 'manual'; } catch (_) {}
+    }
+    function saveScroll() {
+      try { sessionStorage.setItem('__scrollY', String(window.scrollY)); } catch (_) {}
+    }
+    document.addEventListener('submit', saveScroll, true);
+    window.addEventListener('beforeunload', saveScroll);
+    function restoreScroll() {
+      try {
+        var y = sessionStorage.getItem('__scrollY');
+        if (y === null) return;
+        var target = parseInt(y, 10);
+        if (!isFinite(target) || target < 0) { sessionStorage.removeItem('__scrollY'); return; }
+        function attempt() { try { window.scrollTo(0, target); } catch (_) {} }
+        attempt();
+        requestAnimationFrame(function () { attempt(); requestAnimationFrame(attempt); });
+        setTimeout(attempt, 100);
+        setTimeout(attempt, 300);
+        sessionStorage.removeItem('__scrollY');
+      } catch (_) {}
+    }
+    window.addEventListener('pageshow', restoreScroll);
+    document.addEventListener('DOMContentLoaded', restoreScroll);
+  })();
+  </script>
+</head>
+<body hx-boost="true">
+
+<div class="app">
+
+  <main class="main">
+
+    <header class="topbar">
+      <div>
+        <div class="page-title">{{ page_title }}</div>
+        <div class="subtitle">{{ page_subtitle }}</div>
+      </div>
+
+      <div class="top-actions">
+        {% include 'partials/llm_pill.html' %}
+        <div class="avatar">A</div>
+      </div>
+    </header>
+
+    <section class="content">
+      {% block content %}{% endblock %}
+    </section>
+
+    <footer class="footer">
+      <div>© 2026 McDonald's 版权所有</div>
+      <div class="footer-links">
+        <a href="#">文档</a><span>|</span>
+        <a href="#">帮助</a><span>|</span>
+        <a href="#">反馈</a>
+      </div>
+    </footer>
+  </main>
+
+</div>
+
+<div id="settings-modal-slot"></div>
+
+</body>
+</html>
