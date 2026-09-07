@@ -208,3 +208,59 @@ main/
 3. `_tool_target` 对 `external_blank` 的逻辑写反过：原来 `True → target=_blank` 只看 `type=="internal"`，没考虑 external 也要新标签
 
 **End of v3.1.1 HANDOFF (2026-09-04)**
+
+---
+
+## 10. v3.2 · 2026-09-07：门户整合 + LLM 配置移植
+
+### 10.1 背景
+- 用户在 `ideon-portal-clone` 迭代了苹果风首页（37.3KB，5 处 backdrop-filter，cubic-bezier 动画）——但 clone 的 `config.py` TOOLS 没同步，LLM pill 还是静态文本
+- portal 有两个并行副本（clone 远端版 / main 本地版），用户后台还跑着 clone 进程，认知混乱
+- LLM 配置（provider/base_url/model/api_key）在 mcd-ai-content-platform 8530 已经配好，但 portal 没有 modal/路由 —— 点 pill 无反应
+
+### 10.2 整合（clone → main，main 是工作目录）
+| 文件 | 改动 |
+|---|---|
+| `templates/index.html` | cp clone 苹果风首页（37395B）覆盖 main 老 v3 版本 |
+| `templates/_bak-index.html.pre-clone-20260907` | 备份 main 改之前的版本（防回退） |
+| `templates/_bak-app.py.v3-20260904` | 已存在的 v3 备份保留 |
+| **结论** | main 包含全部功能且超过 clone，**建议删 clone** |
+
+### 10.3 LLM 配置移植（抄 8530 实现，走 portal 独立 yaml）
+完整链路（HTMX partial 理念）：
+
+```
+pill click (hx-get) → /api/settings/llm-modal → 渲染 partials/settings_llm_modal.html → 塞 #settings-modal-slot
+```
+
+| 文件 | 改动 |
+|---|---|
+| `templates/index.html` line 471 | 加 `<script src="https://unpkg.com/htmx.org@1.9.10">` |
+| `templates/index.html` line 517-522 | 硬编码 `<div class="llm">LLM 已连接</div>` 换 inline pill（保留 .llm 苹果风紧凑样式 + hx-get 触发 modal） |
+| `templates/index.html` body 末尾 | 加 `<div id="settings-modal-slot">` 容器（HTMX target） |
+| `templates/partials/settings_llm_modal.html` 顶部 | 加 `<style>` 块（modal 自包含样式，不依赖 portal.css） |
+| `app.py` line 15 | `from fastapi.responses import HTMLResponse, RedirectResponse` |
+| `app.py` line 21 | `from llm_config import load_config, is_configured, save_config, get_status, probe_llm, LLM_PROVIDERS, mask_api_key, reload_cache` |
+| `app.py` index 路由 context | 加 `llm_configured` + `llm_model` 字段 |
+| `app.py` 末尾 | 加 3 个路由：`GET /api/settings/llm-modal`、`POST /api/settings/llm`、`POST /api/settings/llm/test`（用现成 `llm_config.py`） |
+
+**配置存储**：写到 `~/.ideon-portal/llm_settings.yaml`（不复用 `~/.mcd-ai/llm_settings.yaml`，按用户口径"key 别迁移"）。
+
+### 10.4 关键 API（新增）
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| GET | `/api/settings/llm-modal` | 点 pill → 返回 LLM 配置 modal HTML |
+| POST | `/api/settings/llm` | 保存 4 字段到 `~/.ideon-portal/llm_settings.yaml` |
+| POST | `/api/settings/llm/test` | 测试当前表单 4 字段能否连上 LLM provider |
+
+### 10.5 踩坑（下次别犯）
+1. **方案 A 一上来就大改**：写路由 + 改 modal + 改 pill → 其实缺 1 行 HTMX script
+2. **pill 用了 partials/llm_pill.html**（`class="model-select"` 大下拉框样式）→ 不适合苹果风 topbar，要用 inline `.llm`
+3. **modal partial 依赖 portal.css 的 .modal-mask 等样式** → 但苹果风 `index.html` 没引 portal.css → modal 堆在底部不弹窗 → 解决：partial 自带 `<style>` 块
+4. **SOP**：下次 copy 前先 grep 完整链路（head script + partial + style + 路由 + 配置）—— 不要上来就大改
+
+### 10.6 Git 状态
+- portal-main：今天 9:30 新 init（master 分支，无 remote，无 commit，无 .gitignore）
+- portal-clone：远端 ori-yin/ideon-portal @ 8a5ca89（v3.1 旧版）
+
+**End of v3.2 HANDOFF (2026-09-07)**

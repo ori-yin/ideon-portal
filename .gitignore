@@ -12,15 +12,19 @@ venv/
 *.db
 *.sqlite
 *.sqlite3
+portal.db
 
 # 日志
 logs/
 *.log
 
-# 备份文件
+# 备份文件（不进 git，本地留作回滚凭证）
 *.bak
 *.bak.md
 DEPLOY-HANDOFF.v*.bak.md
+_bak-*
+_bak-app.py.v*
+_bak-config.py.v*
 
 # IDE
 .vscode/

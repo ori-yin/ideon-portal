@@ -12,13 +12,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import sqlite3
 
 from config import TOOLS, ICON_MAP, IDLE_TIMEOUT_MINUTES, CHECK_INTERVAL_SECONDS, DB_PATH, PORTAL_PORT, STATUS_CACHE_TTL
+from llm_config import load_config, is_configured, save_config, get_status, probe_llm, LLM_PROVIDERS, mask_api_key, reload_cache
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -380,6 +381,7 @@ async def index(request: Request):
     err = request.query_params.get("err")
     need_title = (TOOLS.get(need) or {}).get("title", "") if need else ""
     cards, hidden_count = build_cards()
+    status = get_status()
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -392,6 +394,8 @@ async def index(request: Request):
             "need_start": need,
             "need_start_title": need_title,
             "err": err,
+            "llm_configured": status["configured"],
+            "llm_model": status["model"],
         },
     )
 
@@ -641,6 +645,128 @@ async def idle_checker():
         except Exception:
             pass
         await asyncio.sleep(CHECK_INTERVAL_SECONDS)
+
+
+# ============== LLM 设置路由（点右上角 pill → 弹 modal） ==============
+
+@app.get("/api/settings/llm-modal")
+async def api_settings_llm_modal(request: Request):
+    """点 LLM pill → 弹配置 modal（HTMX 塞 #settings-modal-slot）。"""
+    cfg = load_config()
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/settings_llm_modal.html",
+        context={
+            "request": request,
+            "form": {
+                "provider": cfg.get("provider", ""),
+                "base_url": cfg.get("base_url", ""),
+                "model": cfg.get("model", ""),
+                "api_key": "",  # 密码框不预填；masked_key 提示已有值
+            },
+            "masked_key": mask_api_key(cfg.get("api_key", "")),
+            "providers": LLM_PROVIDERS,
+            "errors": [],
+            "test_ok": False,
+            "saved": False,
+        },
+    )
+
+
+@app.post("/api/settings/llm")
+async def api_settings_llm_save(request: Request):
+    """保存 LLM 配置到 ~/.ideon-portal/llm_settings.yaml。"""
+    form = await request.form()
+    provider = (form.get("provider") or "").strip()
+    base_url = (form.get("base_url") or "").strip()
+    model = (form.get("model") or "").strip()
+    api_key = (form.get("api_key") or "").strip()
+
+    cfg_old = load_config()
+    errors = []
+    if not provider:
+        errors.append("Provider 不能为空")
+    if not model:
+        errors.append("Model 不能为空")
+    if not api_key and not cfg_old.get("api_key"):
+        errors.append("API Key 不能为空（首次配置必须填）")
+
+    if errors:
+        return templates.TemplateResponse(
+            request=request,
+            name="partials/settings_llm_modal.html",
+            context={
+                "request": request,
+                "form": {"provider": provider, "base_url": base_url,
+                         "model": model, "api_key": ""},
+                "masked_key": mask_api_key(cfg_old.get("api_key", "")),
+                "providers": LLM_PROVIDERS,
+                "errors": errors,
+                "test_ok": False,
+                "saved": False,
+            },
+        )
+
+    save_config({"provider": provider, "base_url": base_url,
+                 "model": model, "api_key": api_key or cfg_old.get("api_key", "")})
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/settings_llm_modal.html",
+        context={
+            "request": request,
+            "form": {"provider": provider, "base_url": base_url,
+                     "model": model, "api_key": ""},
+            "masked_key": mask_api_key(api_key or cfg_old.get("api_key", "")),
+            "providers": LLM_PROVIDERS,
+            "errors": [],
+            "test_ok": False,
+            "saved": True,
+        },
+    )
+
+
+@app.post("/api/settings/llm/test")
+async def api_settings_llm_test(request: Request):
+    """测试当前表单 4 字段能否连上，返回同 modal（test_ok=True/False）。"""
+    form = await request.form()
+    provider = (form.get("provider") or "").strip()
+    base_url = (form.get("base_url") or "").strip()
+    model = (form.get("model") or "").strip()
+    api_key = (form.get("api_key") or "").strip()
+
+    cfg_old = load_config()
+    effective_key = api_key or cfg_old.get("api_key", "")
+    effective_model = model or cfg_old.get("model", "")
+    effective_url = base_url or cfg_old.get("base_url", "")
+
+    errors = []
+    if not provider:
+        errors.append("Provider 不能为空")
+    if not effective_model:
+        errors.append("Model 不能为空")
+    if not effective_key:
+        errors.append("API Key 不能为空（首次配置必须填）")
+
+    test_ok = False
+    detail = ""
+    if not errors:
+        test_ok, detail = probe_llm(provider, effective_url, effective_key, effective_model)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/settings_llm_modal.html",
+        context={
+            "request": request,
+            "form": {"provider": provider, "base_url": effective_url,
+                     "model": effective_model, "api_key": ""},
+            "masked_key": mask_api_key(effective_key),
+            "providers": LLM_PROVIDERS,
+            "errors": ([] if test_ok else ([detail] if detail else errors)),
+            "test_ok": test_ok,
+            "saved": False,
+        },
+    )
 
 
 if __name__ == "__main__":

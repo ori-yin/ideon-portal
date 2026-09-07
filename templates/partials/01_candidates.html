@@ -1,0 +1,42 @@
+{# partials/01_candidates.html — 3 张候选卡 + 选中态 + 规则诊断
+
+依赖：
+  - candidates（list[dict]，含 id / title / body / strategy）
+  - selected_id（str）
+  - rule_results（list[dict]，与 candidates 等长）
+  - selected_rule（dict，当前选中候选的 RuleResult）
+#}
+
+{% if not candidates %}
+<div class="empty-state">
+  尚未生成候选。请先在左侧填字段，点击「生成 3 条候选内容」。
+</div>
+{% else %}
+
+<div class="panel-heading"2">2 选择候选内容</div>
+
+<div class="candidate-grid">
+  {% for c in candidates %}
+  <div class="candidate-card {% if c.id == selected_id %}selected{% endif %}">
+    <div class="cand-row">
+      <div class="cand-header">
+        <b>{{ c.id }}</b> · {{ c.strategy.split('_', 1)[1] if '_' in (c.strategy or '') else (c.strategy or '') }}
+      </div>
+      <div class="cand-title">{{ c.title or '（无标题）' }}</div>
+      <form method="post" action="/api/studio/select">
+        <input type="hidden" name="selected_id" value="{{ c.id }}">
+        <button type="submit"
+                class="btn-select {% if c.id == selected_id %}active{% endif %}"
+                {% if c.id == selected_id %}disabled{% endif %}>
+          {{ '✓ 已选' if c.id == selected_id else '选 ' ~ c.id }}
+        </button>
+      </form>
+    </div>
+    <div class="cand-body">{{ c.body }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+{# 规则诊断完整版见右侧第 5 块（partials/01_right_column.html），此处不再重复渲染 #}
+
+{% endif %}

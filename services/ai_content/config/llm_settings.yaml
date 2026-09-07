@@ -1,0 +1,25 @@
+# LLM 配置（业务确认 #10：内网 LLM 接口先留空）
+# --------------------------------------------------------------
+# 后续使用者填这 4 个字段即可启用 LLM 模式：
+#   1. provider      API Provider 名（如 "openai" / "siliconflow" / "qianfan" / "internal-llm"）
+#   2. base_url      API 基础地址（内网接口请填内网域名，如 "https://llm.internal.mcd.com/v1"）
+#   3. model         模型名（如 "gpt-4o-mini" / "Qwen2.5-7B" / "mcd-llm-v1"）
+#   4. api_key       API Key（从环境变量或密钥管理服务获取，不要直接填在这里）
+#
+# 留空时整个应用进入 Demo 模式：
+#   - 01 创作：返回固定 3 条占位候选
+#   - 02 诊断：返回 mock issues + 通用改写建议
+#   - 03 批量评估：仅走规则 + CTR Adapter
+#
+# 启用后请把下面 4 个字段从 "" 改成实际值，然后重启应用。
+
+provider: ""        # 例: "openai" / "siliconflow" / "internal-llm"
+base_url: ""        # 例: "https://llm.internal.mcd.com/v1"
+model: ""           # 例: "mcd-llm-v1"
+api_key: ""         # 例: "sk-..."（建议用环境变量 GITHUB_TOKEN 类似方式注入）
+
+# 备选 provider 元数据（无需改）
+# MiniMax:           https://api.minimax.chat/v1,    MiniMax-M3 / abab6.5s-chat
+# openai:            (SDK 默认),                    gpt-4o / gpt-4o-mini
+# siliconflow:       https://api.siliconflow.cn/v1, Qwen2.5-7B-Instruct
+# qianfan:           https://qianfan.baidubce.com/v2/coding, ernie-4.5-8k / ernie-speed

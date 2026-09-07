@@ -1,0 +1,128 @@
+{# partials/studio_right.html — 完整右栏（5 个子区块，抄自 mcd-ai-content-platform 01_right_column.html）
+
+依赖：
+  - selected_candidate（dict 或 None：含 id/strategy/title/body/reason/rule_results/ctr_pred/ctr_base/ctr_result_type）
+  - task_input（dict：channel/audience/tone/stage/scene/objective/...）
+  - similar_summary（dict: count，可空）
+  - ctr_mode（demo / baseline_only / l1_model）
+#}
+
+{% if not selected_candidate %}
+<div class="empty-state">生成候选后此处显示渠道预览和 CTR 参考。</div>
+{% else %}
+
+<div class="panel-heading">3 预览并比较预测结果</div>
+
+{# ── 1. 渠道预览 ───────────────────────────── #}
+<div class="subsection">
+  <div class="subsection-label">渠道预览</div>
+  {% if task_input.channel == 'APP Push' %}
+  <div class="preview-card">
+    <div class="preview-meta">McDonald's · 现在</div>
+    <div class="pv-title">{{ selected_candidate.title or '（无标题）' }}</div>
+    <div class="pv-body">{{ selected_candidate.body }}</div>
+    <div class="pv-meta">APP Push · 点击查看</div>
+  </div>
+  {% elif task_input.channel == '企微1v1' %}
+  <div class="wechat-bubble-wrap">
+    <div class="wc-avatar"><img src="/static/img/mcdonalds.svg" alt="M" class="wc-m"></div>
+    <div class="wechat-bubble">
+      <div class="wc-name">麦当劳会员服务</div>
+      <div class="wc-title">{{ selected_candidate.title or '（无标题）' }}</div>
+      <div class="wc-body">{{ selected_candidate.body }}</div>
+      <div class="wc-meta">今天 · 已送达</div>
+    </div>
+  </div>
+  {% elif task_input.channel == '短信' %}
+  <div class="preview-card">
+    <div class="preview-meta">106xxxxxxxx</div>
+    <div class="pv-body">{{ selected_candidate.body }}</div>
+    <div class="pv-meta">短信 · {{ (selected_candidate.body or '')|length }} 字</div>
+  </div>
+  {% else %}
+  <div class="warning-banner">该渠道预览待 P1 实现（PRD §8.2）</div>
+  {% endif %}
+</div>
+
+{# ── 2. CTR 参考 ───────────────────────────── #}
+<div class="subsection">
+  <div class="subsection-label">CTR 参考结果</div>
+  {% if selected_candidate.ctr_pred is none %}
+  <div class="warning-banner">CTR 参考：暂不可用</div>
+  {% else %}
+  <div class="kpi-tile">
+    <div class="label">状态：{{ selected_candidate.ctr_result_type or 'unknown' }}</div>
+    {% if selected_candidate.ctr_pred is not none %}
+    <div class="value">{{ "%.2f"|format((selected_candidate.ctr_pred or 0) * 100) }}%</div>
+    <div class="sub">预测 CTR</div>
+    {% endif %}
+    {% if selected_candidate.ctr_base is not none %}
+    <div class="sub">历史基准：{{ "%.2f"|format((selected_candidate.ctr_base or 0) * 100) }}%</div>
+    {% endif %}
+    {% if selected_candidate.ctr_pred is not none and selected_candidate.ctr_base is not none and selected_candidate.ctr_base > 0 %}
+      {% set diff_pp = ((selected_candidate.ctr_pred or 0) - (selected_candidate.ctr_base or 0)) * 100 %}
+    <div class="sub">相对基准：{% if diff_pp >= 0 %}+{% endif %}{{ "%.2f"|format(diff_pp) }} 个百分点</div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{# ── 3. 投放理由 ───────────────────────────── #}
+<div class="subsection">
+  <div class="subsection-label">投放理由</div>
+  {% set reasons = [] %}
+  {% if selected_candidate.rule_results %}{% set _ = reasons.append('规则通过 ' ~ (selected_candidate.rule_results|length) ~ ' 项') %}{% endif %}
+  {% if selected_candidate.reason %}{% set _ = reasons.append(selected_candidate.reason) %}{% endif %}
+  {% if task_input.objective %}{% set _ = reasons.append('匹配 ' ~ task_input.objective ~ ' + ' ~ (task_input.stage or '通用') ~ ' 目标') %}
+  {% else %}{% set _ = reasons.append('匹配 ' ~ (task_input.stage or '通用') ~ ' 目标') %}{% endif %}
+  {% if task_input.scene and task_input.scene != '其他' %}{% set _ = reasons.append('场景：' ~ task_input.scene) %}{% endif %}
+  <div class="decision-card">
+    <ul>
+      {% for r in reasons %}<li>{{ r }}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+
+{# ── 4. 可信程度 ───────────────────────────── #}
+<div class="subsection">
+  <div class="subsection-label">可信程度</div>
+  {% set level = '低' %}
+  {% set conf_reasons = [] %}
+  {% if selected_candidate.ctr_result_type == 'model_prediction' and selected_candidate.ctr_pred is not none %}
+    {% set level = '高' %}
+    {% set _ = conf_reasons.append('使用模型预测') %}
+  {% elif selected_candidate.ctr_result_type == 'baseline_only' %}
+    {% set level = '中' %}
+    {% set _ = conf_reasons.append('仅历史基准，无 LLM 预测') %}
+  {% elif selected_candidate.ctr_result_type == 'demo' %}
+    {% set level = '中' %}
+    {% set _ = conf_reasons.append('演示数据，非正式投放承诺') %}
+  {% else %}
+    {% set _ = conf_reasons.append('无有效结果') %}
+  {% endif %}
+  {% set sim_count = similar_summary.count if similar_summary.count else 0 %}
+  {% if sim_count >= 3 %}
+    {% if level == '低' %}{% set level = '中' %}{% endif %}
+    {% set _ = conf_reasons.append('找到 ' ~ sim_count ~ ' 条相似历史内容') %}
+  {% elif sim_count == 0 %}
+    {% set _ = conf_reasons.append('未找到相似历史内容') %}
+  {% endif %}
+  <div class="kpi-tile">
+    <div class="label">参考可信度</div>
+    <div class="value">{{ level }}</div>
+    {% for r in conf_reasons %}<div class="sub">{{ r }}</div>{% endfor %}
+  </div>
+</div>
+
+{# ── 5. 推荐结论 ───────────────────────────── #}
+<div class="subsection">
+  <div class="subsection-label">推荐结论</div>
+  {% set obj_part = ' + ' ~ task_input.objective if task_input.objective else '' %}
+  <div class="decision-card">
+    参考结论：当前版本符合 {{ task_input.channel }} 基础规则，与「{{ task_input.stage or '通用' }}{{ obj_part }}」目标匹配。
+    三条候选均为 A/B/C 策略不同版本（Phase 29 固定 ABC 顺序，不再按 CTR 重排），
+    请人工选择最适合的一条投放。建议结合业务判断后使用。
+  </div>
+</div>
+
+{% endif %}

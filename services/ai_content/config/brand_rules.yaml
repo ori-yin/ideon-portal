@@ -1,0 +1,40 @@
+# -*- coding: utf-8 -*-
+# brand_rules.yaml — 必带 / 风险 / 禁词规则
+# PRD §11.4 配置化硬规则
+# PRD §26 第 6 项"品牌禁用词、风险词和必带字段清单"待业务确认 → 首版用 mcd-copy-analyzer 的 data/stopwords.txt 默认值
+# 后续业务确认时改 YAML 不改代码
+
+version: "1.0"
+
+# ── 必带词段（命中得分高；命中缺失扣分）──
+# Phase 3.1 暂不强制命中（warn 而非 fail），由 rule_engine 处理
+required_terms:
+  APP Push:
+    - 新品
+    - 限时
+    - 点击查看
+  企微1v1:
+    - 专属
+    - 福利
+  短信:
+    - 回T退订
+
+# ── 风险词（命中 warn）──
+# 过度承诺 / 不可控承诺 / 法规风险
+risk_terms:
+  - 保证
+  - 最低价
+  - 全网最低
+  - 史上最低
+  - 100%
+  - 绝对
+  - 错过等一年
+  - 仅此一次
+  - 限今天
+
+# ── 禁词（命中 fail / 阻断）──
+# 沿用 data/stopwords.txt 的 #禁词 段首版值
+banned_terms:
+  - 上线
+  - 件套
+  - 摇滚

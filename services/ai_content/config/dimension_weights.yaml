@@ -1,0 +1,32 @@
+# -*- coding: utf-8 -*-
+# dimension_weights.yaml — 维度权重（文案诊断 + baseline 微调）
+# Handoff §6.3 P3 落地
+# 由 tools/train_dimension_weights.py 训练覆写
+# 失败/缺失时 load_dimension_weights() 走兜底（等权 1.0）
+
+version: v0.1
+last_updated: 2026-08-26
+_trained_by: default
+_log: |
+  v0.1 = 等权默认值（对应 diagnose_score 硬编码 12/13/15/30/30 → 1.0）
+
+# ── 文案诊断 5 维度权重（满分系数，作用于 _score_* 输出后） ──
+# 键名必须与 diagnose_score 返回的 breakdown dict 完全一致
+# 满分参考：标题字数 12 / 正文字数 13 / Emoji 15 / 命中高效词 30 / 框架命中 30
+dimensions:
+  标题字数: 1.0
+  正文字数: 1.0
+  Emoji: 1.0
+  命中高效词: 1.0
+  框架命中: 1.0
+
+# ── CTR baseline 维度级微调乘子（作用于回退后的 raw_bl） ──
+# 含义：weight > 1 放大该维度贡献，weight < 1 抑制
+# clamp 范围 [0.5, 2.0]，缺维度默认 1.0
+baseline_modifiers:
+  渠道_x_标题字数: 1.0
+  渠道_x_计划类型: 1.0
+  渠道_x_预算owner: 1.0
+  渠道_x_是否用券: 1.0
+  渠道_x_工作日类型: 1.0
+  渠道: 1.0

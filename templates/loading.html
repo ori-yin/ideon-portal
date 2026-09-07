@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>正在启动 · iDeon 工具中台</title>
+<style>
+:root{
+  --bg-canvas:#F5F5F7;
+  --surface:#FFFFFF;
+  --text-primary:#1D1D1F;
+  --text-secondary:#6E6E73;
+  --text-tertiary:#86868B;
+  --primary:#0A6EE8;
+  --primary-soft:#EAF3FF;
+  --radius-md:14px;
+  --radius-lg:20px;
+  --shadow-card:0 10px 28px rgba(28,43,65,.055);
+  --shadow-floating:0 18px 50px rgba(28,43,65,.12);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif;color:var(--text-primary);background:var(--bg-canvas)}
+body{
+  min-height:100vh;display:grid;place-items:center;padding:24px;
+  background:
+    radial-gradient(900px 500px at 52% -150px,rgba(216,230,255,.72),transparent 70%),
+    radial-gradient(700px 500px at 95% 90%,rgba(235,239,255,.55),transparent 65%),
+    var(--bg-canvas);
+}
+.card{
+  background:linear-gradient(145deg,rgba(255,255,255,.92),rgba(255,255,255,.74));
+  border:1px solid rgba(255,255,255,.9);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-floating);
+  padding:48px 56px;
+  text-align:center;
+  min-width:340px;max-width:420px;
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+}
+.gif{
+  width:120px;height:120px;border-radius:50%;
+  background:var(--primary-soft);
+  display:grid;place-items:center;margin:0 auto 24px;
+  position:relative;
+}
+.gif img{width:80px;height:80px;display:block}
+.gif::after{
+  content:"";position:absolute;inset:-6px;border-radius:50%;
+  border:2px solid var(--primary-soft);
+  animation:ring 1.8s ease-out infinite;
+}
+@keyframes ring{
+  0%{transform:scale(.9);opacity:.8}
+  100%{transform:scale(1.4);opacity:0}
+}
+.title{font-size:18px;font-weight:600;letter-spacing:-.3px;margin:0 0 8px}
+.subtitle{font-size:13.5px;color:var(--text-secondary);margin:0 0 4px}
+.hint{font-size:11.5px;color:var(--text-tertiary);margin-top:16px}
+.hint a{color:var(--primary);text-decoration:none}
+.hint a:hover{text-decoration:underline}
+.dots::after{
+  content:"";display:inline-block;width:1em;text-align:left;
+  animation:dots 1.2s steps(4,end) infinite;
+}
+@keyframes dots{
+  0%,25%{content:""}
+  50%{content:"."}
+  75%{content:".."}
+  100%{content:"..."}
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="gif"><img src="/static/loading.gif" alt="loading"></div>
+  <h1 class="title">正在启动服务<span class="dots"></span></h1>
+  <p class="subtitle" id="sub">服务就绪后将自动跳转</p>
+  <p class="hint">如长时间未跳转，<a href="{{ target }}" id="manual">点此手动前往</a></p>
+</div>
+
+<script>
+(function(){
+  const target = {{ target|tojson }};
+  let attempts = 0;
+  const sub = document.getElementById('sub');
+  const manual = document.getElementById('manual');
+  // 优先探测后端 /api/summary，ready 后跳 target
+  const tick = async () => {
+    attempts++;
+    try{
+      const r = await fetch('/api/summary', {cache:'no-store'});
+      if(r.ok){
+        sub.textContent = '服务已就绪，正在跳转…';
+        setTimeout(()=>{ window.location.href = target; }, 400);
+        return;
+      }
+    }catch(e){}
+    if(attempts < 30){
+      setTimeout(tick, 1000);
+    }else{
+      sub.textContent = '启动耗时较长，可手动前往';
+    }
+  };
+  // 立即探测一次，2 秒后开始轮询
+  setTimeout(tick, 2000);
+  // 同时做兜底：12 秒后强制跳
+  setTimeout(()=>{ window.location.href = target; }, 12000);
+})();
+</script>
+</body>
+</html>
