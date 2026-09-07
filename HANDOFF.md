@@ -122,11 +122,16 @@ tools/push_via_api.py  (github.com 被墙时走 api.github.com 推)
 - 改 HTML：先 Read 整段再改；改文件名走 grep → Edit
 - 改 LLM 配置：portal 走 `~/.ideon-portal/llm_settings.yaml`（**不与 mcd-ai 共享**）
 
+## v3.4+（2026-09-07 同步验证 + 待推）
+- **mcd-ai Phase 52 同步到 portal**：Phase 52 的 04 历史洞察改动（per-tab LRU + HTMX 局部替换 + compare_token 向量化 + rank_plans CSV 日期守卫）在 mcd-ai-content-platform 已 commit `b2b71bf` + push `2e3ee907`。**portal 不需要新代码改动**——v3.4 (c44cc05) 同步 web_content/ 时已经一起搬过来了，byte 级比对 04 helpers / routes / partials / page 全部一致，仅 `@app.get` vs `@router.get` 3 字节架构差异。
+- **本地 4 commit 未推**：v3.4 / ad54c2a push_via_api token env / v3.3 / init 攒在本地未到远端（远端还停在 `d5ff87b`）。今天顺序推上 ori-yin/ideon-portal（push_via_api.py 改成顺序推保留历史）。
+- **portal 数据目录**：`services/ai_content/data/`（lgbm model pickle + ctr baseline JSON + 字典）保持 untracked，模型文件不入 git。
+
 ## 推送（github.com 被墙时）
 ```bash
 cd "C:\ideon\ideon-portal-main"
 # 1) commit
 git add -A && git commit -m "v3.4: 内容工坊 + 历史洞察从 mcd-ai 迁过来（sub-app include_router）"
-# 2) 走 api.github.com（脚本里 TOKEN/REPO 已写死，更新 REMOTE_HEAD/REMOTE_TREE 即可）
+# 2) 走 api.github.com（脚本自动拿远端 HEAD + 顺序推未推 commit 保留历史）
 python tools/push_via_api.py
 ```
