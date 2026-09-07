@@ -1,0 +1,41 @@
+{# partials/04_daily_trend.html — Tab 6: 每日趋势 #}
+
+{% if not summary %}
+<div class="warning-banner">无有效日期数据</div>
+{% else %}
+<div class="metric-row metric-row-quad">
+  <div class="metric-box"><div class="ml">总触达</div><div class="mv">{{ "{:,}".format(summary['总触达']) }}</div></div>
+  <div class="metric-box"><div class="ml">总点击</div><div class="mv">{{ "{:,}".format(summary['总点击']) }}</div></div>
+  <div class="metric-box"><div class="ml">整体 CTR</div><div class="mv">{{ "%.2f"|format(summary['整体CTR%']) }}%</div></div>
+  <div class="metric-box"><div class="ml">活跃天数</div><div class="mv">{{ summary['活跃天数'] }}</div></div>
+</div>
+
+{% if summary.get('峰值日') %}
+<div class="card-desc card-desc-spaced-sm">
+  峰值日：{{ summary['峰值日'] }}（{{ "%.2f"|format(summary['峰值CTR%']) }}%）
+   · 谷值日：{{ summary['谷值日'] }}（{{ "%.2f"|format(summary['谷值CTR%']) }}%）
+   · 日均 CTR {{ "%.2f"|format(summary['日均CTR%']) }}%
+</div>
+{% endif %}
+
+<form method="get" hx-get="/api/insights/tab" hx-target="#ins-tab-block" hx-swap="outerHTML">
+  <input type="hidden" name="tab" value="daily">
+  <label class="checkbox-label">
+    <input type="checkbox" name="by_channel" value="1" {% if params.by_channel %}checked{% endif %}
+           hx-trigger="change" hx-get="/api/insights/tab" hx-target="#ins-tab-block" hx-swap="outerHTML"
+           hx-include="closest form">
+    按渠道拆分
+  </label>
+</form>
+
+{% if not df_rows %}
+<div class="warning-banner">聚合为空</div>
+{% else %}
+<div class="batch-wrap">
+<table class="batch-table">
+  <thead><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for r in df_rows %}<tr>{% for c in columns %}<td>{{ r[c] }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table>
+</div>
+{% endif %}
+{% endif %}

@@ -21,6 +21,10 @@ import sqlite3
 from config import TOOLS, ICON_MAP, IDLE_TIMEOUT_MINUTES, CHECK_INTERVAL_SECONDS, DB_PATH, PORTAL_PORT, STATUS_CACHE_TTL
 from llm_config import load_config, save_config, get_status, probe_llm, LLM_PROVIDERS
 
+# v3.4 集成 mcd-ai-content-platform 的内容工坊 (/studio) + 历史洞察 (/insights)
+# 作为 sub-app 挂载，路由前缀由 web_content 的 templates 里硬编码
+from web_content.app import router as content_router
+
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
@@ -730,6 +734,10 @@ async def api_settings_llm_test(request: Request):
         import sys
         print(f"[llm-test] FAIL provider={provider!r} model={effective_model!r} base_url={effective_url!r}\n{detail}", file=sys.stderr)
     return JSONResponse({"ok": test_ok, "detail": detail or ""})
+
+
+# v3.4：挂载内容工坊 + 历史洞察（来自 mcd-ai-content-platform/web 迁移）
+app.include_router(content_router)
 
 
 if __name__ == "__main__":

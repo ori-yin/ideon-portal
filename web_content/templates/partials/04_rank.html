@@ -1,0 +1,80 @@
+{# partials/04_rank.html — Tab 1: 高效 Plan 排行
+
+依赖：
+  - df_rows（list[dict]，已转 JSON 安全）
+  - params（dict: min_reach/top_n）
+#}
+
+<form method="get" hx-get="/api/insights/tab" hx-target="#ins-tab-block" hx-swap="outerHTML" class="form-grid form-grid-quad">
+  <input type="hidden" name="tab" value="rank" />
+  <div class="form-row">
+    <label>最小触达过滤</label>
+    <select name="min_reach">
+      {% for v in [100,500,1000,3000,5000,10000] %}
+      <option value="{{ v }}" {% if params.min_reach|string == v|string %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row">
+    <label>显示前 N 条</label>
+    <select name="top_n">
+      {% for v in [5,10,20,30,50,100] %}
+      <option value="{{ v }}" {% if params.top_n|string == v|string %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row form-row-span2">
+    <label>输入 Plan ID 查详情</label>
+    <input type="text" name="rank_plan_sel" value="{{ params.rank_plan_sel }}"
+           placeholder="单个 plan 详细元数据 + CTR" maxlength="64"
+           autocomplete="off" />
+  </div>
+  <div class="form-row">
+    <button type="submit" class="btn btn-dark btn-sm">查询</button>
+  </div>
+</form>
+
+{% if plan_detail %}
+<div class="subsection">
+  <div class="subsection-label">Plan 详情 · {{ plan_detail.plan_id }}</div>
+  <div class="metric-row metric-row-tri">
+    <div class="metric-box"><div class="ml">触达成功</div><div class="mv">{{ "{:,}".format(plan_detail.触达成功) }}</div></div>
+    <div class="metric-box"><div class="ml">点击</div><div class="mv">{{ "{:,}".format(plan_detail.点击) }}</div></div>
+    <div class="metric-box"><div class="ml">加权 CTR</div><div class="mv">{{ "%.2f"|format(plan_detail['加权CTR%']) }}%</div></div>
+  </div>
+  <div class="metric-row metric-row-quad">
+    <div class="metric-box"><div class="ml">Plan 名称</div><div class="mv">{{ plan_detail.plan_name or '—' }}</div></div>
+    <div class="metric-box"><div class="ml">渠道</div><div class="mv">{{ plan_detail.channel or '—' }}</div></div>
+    <div class="metric-box"><div class="ml">Owner</div><div class="mv">{{ plan_detail.owner or '—' }}</div></div>
+    <div class="metric-box"><div class="ml">覆盖高效词数</div><div class="mv">{{ plan_detail['覆盖高效词数'] if plan_detail['覆盖高效词数'] is defined else 0 }}</div></div>
+  </div>
+  <div class="card-desc card-desc-spaced-sm">
+    n_records={{ plan_detail.n_records }} · n_days={{ plan_detail.n_days }} · 标题字数均值={{ plan_detail.标题字数均值 }} · 正文字数均值={{ plan_detail.正文字数均值 }}
+  </div>
+  {% if plan_detail.样本标题 %}
+  <div class="card-desc card-desc-spaced-sm"><b>样本标题：</b>{{ plan_detail.样本标题 }}</div>
+  {% endif %}
+  {% if plan_detail.样本正文 %}
+  <div class="card-desc card-desc-spaced-sm"><b>样本正文：</b>{{ plan_detail.样本正文 }}{% if plan_detail.样本正文|length >= 120 %}…{% endif %}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if not df_rows %}
+<div class="warning-banner">无符合条件的高效 Plan（调低最小触达过滤或上传更多数据）</div>
+{% else %}
+<div class="batch-wrap">
+<table class="batch-table">
+  <thead><tr>
+    {% for c in columns %}<th>{{ c }}</th>{% endfor %}
+  </tr></thead>
+  <tbody>
+  {% for r in df_rows %}
+  <tr>
+    {% for c in columns %}<td>{{ r[c] }}</td>{% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}历史洞察{% endblock %}
+
+{% block content %}
+
+<div class="panel-card">
+  <div class="panel-heading">1 上传历史数据</div>
+  <div class="card-desc">
+    支持 CSV / Excel。必填列：触达成功 + 点击人次。兼容别名：「发送日期」「渠道」等。
+  </div>
+
+  {% if error_msg %}
+  <div class="warning-banner">{{ error_msg }}</div>
+  {% endif %}
+
+  {% if ins.filename %}
+  <div class="success-banner">
+    已加载 {{ ins.n_rows }} 行（{{ ins.filename }}）
+  </div>
+  {% endif %}
+
+  <form method="post" action="/api/insights/upload" enctype="multipart/form-data" class="form-grid">
+    <div class="form-row form-row-wide">
+      <label>选择历史数据文件</label>
+      <input type="file" name="file" accept=".csv,.xlsx,.xls" required class="file-input">
+    </div>
+    <div class="form-row form-row-wide">
+      <button type="submit" class="btn btn-dark btn-submit">
+        上传并解析
+      </button>
+    </div>
+  </form>
+</div>
+
+{% if ins.filename %}
+
+<div class="panel-card">
+  <div class="panel-heading">2 数据概览</div>
+  <div class="metric-row">
+    <div class="metric-box"><div class="ml">总记录数</div><div class="mv">{{ ins.n_rows }}</div></div>
+    <div class="metric-box"><div class="ml">含文案记录</div><div class="mv">{{ ins.n_has_copy if ins.n_has_copy is not none else '—' }}</div></div>
+    <div class="metric-box"><div class="ml">渠道数</div><div class="mv">{{ ins.n_channels }}</div></div>
+    <div class="metric-box"><div class="ml">日期范围</div><div class="mv-sm">{{ ins.date_range }}</div></div>
+  </div>
+  {% if ins.channels %}
+  <div class="card-desc">渠道：{{ ins.channels | join(' · ') }}</div>
+  {% endif %}
+</div>
+
+<div class="panel-card panel-flat">
+  {# Phase 51：HTMX 局部替换 fragment（包含 tabs nav + 内容）#}
+  {% include "_insights_tab_block.html" %}
+</div>
+
+{% endif %}
+
+{% endblock %}
