@@ -2,24 +2,39 @@
 """Push portal-main to ori-yin/ideon-portal via Git Data API.
 
 github.com 被墙，走 api.github.com。
-4 步：blobs → trees → commits → PATCH ref
+
+模式：顺序推保留历史（v2）
+- 动态拿远端 HEAD（不再写死 REMOTE_HEAD_SHA）
+- 用 git rev-list 找本地未推 commit（oldest first）
+- 对每条 commit：POST blobs（基于该 commit 的 tree）→ POST trees → POST commits → PATCH ref
+- 父链用远端当前的 HEAD（不是本地 parent），保证每条 commit 都挂到远端 chain 上
 
 Token 走环境变量 GITHUB_TOKEN（不能写死，secret scanning 拦）：
   $env:GITHUB_TOKEN = "ghp_..."; python tools/push_via_api.py
 """
-import os, sys, json, base64, subprocess, urllib.request, urllib.error, time
+import os
+import sys
+import json
+import base64
+import subprocess
+import time
+import urllib.request
+import urllib.error
 
 TOKEN = os.environ.get("GITHUB_TOKEN")
 if not TOKEN:
     sys.exit("GITHUB_TOKEN env var required (e.g. $env:GITHUB_TOKEN='ghp_...')")
 REPO = "ori-yin/ideon-portal"
 BRANCH = "main"
-# 每次 push 前用 `curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/ori-yin/ideon-portal/git/ref/heads/main` 拿 HEAD
-REMOTE_HEAD_SHA = "14c216328bfe6c7173e77b8b608e76f1a0c4711b"
-REMOTE_TREE_SHA = "6821f3ef59367895b4f9c7a14133b93773d5489a"
 REPO_DIR = r"C:\ideon\ideon-portal-main"
-
 API = "https://api.github.com"
+
+
+def git(*args):
+    return subprocess.check_output(
+        ["git", "-C", REPO_DIR, *args],
+        text=True, encoding="utf-8", errors="replace",
+    )
 
 
 def http(method, path, body=None, retried=False):
@@ -31,7 +46,7 @@ def http(method, path, body=None, retried=False):
     if body is not None:
         req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body_text = e.read().decode("utf-8", errors="replace")
@@ -45,121 +60,134 @@ def http(method, path, body=None, retried=False):
         raise
 
 
-def main():
-    # 1. 列出本地所有 tracked files（core.quotePath=false 避免中文转义）
-    # git ls-tree 输出是 UTF-8（即使磁盘文件名是 GBK 字节）
-    files_raw = subprocess.check_output(
-        ["git", "-C", REPO_DIR, "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "HEAD"],
+def get_remote_head():
+    return http("GET", f"/repos/{REPO}/git/ref/heads/{BRANCH}")["object"]["sha"]
+
+
+def get_local_head():
+    return git("rev-parse", "HEAD").strip()
+
+
+def get_unpushed_commits(remote_head, local_head):
+    """返回 oldest-first 的 commit SHA 列表。"""
+    out = git("rev-list", "--reverse", f"{remote_head}..{local_head}")
+    return [s.strip() for s in out.splitlines() if s.strip()]
+
+
+def get_commit_info(sha):
+    """解析 git cat-file -p <sha>，返回 {tree, message}。"""
+    raw = git("cat-file", "-p", sha)
+    tree = None
+    lines = raw.split("\n")
+    i = 0
+    while i < len(lines):
+        l = lines[i]
+        if l.startswith("tree "):
+            tree = l.split()[1]
+        elif l.strip() == "":
+            i += 1
+            break
+        i += 1
+    message = "\n".join(lines[i:]).rstrip("\n")
+    return {"tree": tree, "message": message}
+
+
+def get_tree_files(tree_sha):
+    """返回 [(path, blob_sha), ...] 列表。"""
+    out = git("ls-tree", "-r", tree_sha)
+    files = []
+    for line in out.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) >= 4 and parts[1] == "blob":
+            files.append((parts[3], parts[2]))
+    return files
+
+
+def upload_blob(local_sha):
+    """从本地 git 对象读 blob 内容，上传。"""
+    raw = subprocess.check_output(
+        ["git", "-C", REPO_DIR, "cat-file", "blob", local_sha],
     )
-    files = files_raw.decode("utf-8", errors="replace").splitlines()
-    print(f"local files: {len(files)}")
+    try:
+        text = raw.decode("utf-8")
+        return http("POST", f"/repos/{REPO}/git/blobs",
+                    {"content": text, "encoding": "utf-8"})["sha"]
+    except UnicodeDecodeError:
+        b64 = base64.b64encode(raw).decode("ascii")
+        return http("POST", f"/repos/{REPO}/git/blobs",
+                    {"content": b64, "encoding": "base64"})["sha"]
 
-    # 2. 拉远端 tree，找要删的
-    remote_tree = http("GET", f"/repos/{REPO}/git/trees/{REMOTE_TREE_SHA}?recursive=1")
-    remote_paths = {t["path"] for t in remote_tree["tree"] if t["type"] == "blob"}
-    local_paths = set(files)
-    to_delete = sorted(remote_paths - local_paths)
-    print(f"remote blobs: {len(remote_paths)}, to_delete: {len(to_delete)}")
-    for p in to_delete:
-        print(f"  DEL {p}")
 
-    # 3. POST blobs（所有本地文件）
-    print("\n--- Step 1: POST blobs ---")
-    tree_entries = []
-    for i, relpath in enumerate(files, 1):
-        # Windows 磁盘文件名可能是 GBK 字节，unicode 路径要先 encode 回 cp 再 open
-        # 简单粗暴：open with surrogateescape 拿到 bytes 路径
-        try:
-            full_bytes = os.fsencode(os.path.join(REPO_DIR, relpath))
-            with open(full_bytes, "rb") as f:
-                content_bytes = f.read()
-        except OSError:
-            # fallback: 用 git cat-file（避开编码问题）
-            ls_out = subprocess.check_output(
-                ["git", "-C", REPO_DIR, "-c", "core.quotePath=false", "ls-tree", "-r", "HEAD"],
-                text=True, encoding="utf-8"
-            )
-            local_sha = None
-            for ln in ls_out.splitlines():
-                parts = ln.split(None, 3)
-                if len(parts) >= 4 and parts[3] == relpath:
-                    local_sha = parts[2]
-                    break
-            if not local_sha:
-                print(f"  WARN no sha for {relpath!r}, skip")
-                continue
-            content_bytes = subprocess.check_output(
-                ["git", "-C", REPO_DIR, "cat-file", "blob", local_sha]
-            )
-        # 二进制检测：尝试 utf-8 解码
-        try:
-            content_bytes.decode("utf-8")
-            content_str = content_bytes.decode("utf-8")
-            blob_body = {"content": content_str, "encoding": "utf-8"}
-        except UnicodeDecodeError:
-            content_b64 = base64.b64encode(content_bytes).decode("ascii")
-            blob_body = {"content": content_b64, "encoding": "base64"}
+def upload_tree(files, blob_shas):
+    entries = [{"path": p, "mode": "100644", "type": "blob", "sha": blob_shas[p]}
+               for p, _ in files]
+    return http("POST", f"/repos/{REPO}/git/trees", {"tree": entries})["sha"]
 
-        result = http("POST", f"/repos/{REPO}/git/blobs", blob_body)
-        blob_sha = result["sha"]
-        tree_entries.append({
-            "path": relpath,
-            "mode": "100644",
-            "type": "blob",
-            "sha": blob_sha
-        })
-        if i % 20 == 0 or i == len(files):
-            print(f"  [{i}/{len(files)}] blobs uploaded")
 
-    # 4. 删文件（sha: null）
-    for relpath in to_delete:
-        tree_entries.append({
-            "path": relpath,
-            "mode": "100644",
-            "type": "blob",
-            "sha": None
-        })
+def main():
+    print("=== portal push_via_api v2 (sequential) ===\n")
+    # 先 fetch 远端 ref（rev-list 需要本地能解析远端 SHA）
+    try:
+        subprocess.check_output(
+            ["git", "-C", REPO_DIR, "fetch", "origin", BRANCH],
+            stderr=subprocess.STDOUT,
+        )
+    except subprocess.CalledProcessError as e:
+        out = e.output.decode("utf-8", errors="replace") if e.output else ""
+        # 如果远端 ref 已存在但 fetch 报错（比如无 fetch 权限），脚本仍能用 GET 拿 HEAD
+        print(f"  fetch warning: {out.strip() or '(no stderr)'}")
 
-    # 5. POST trees
-    print("\n--- Step 2: POST trees ---")
-    tree_body = {"base_tree": REMOTE_TREE_SHA, "tree": tree_entries}
-    new_tree = http("POST", f"/repos/{REPO}/git/trees", tree_body)
-    new_tree_sha = new_tree["sha"]
-    print(f"new tree sha: {new_tree_sha}")
+    local_head = get_local_head()
+    remote_head = get_remote_head()
+    print(f"local HEAD : {local_head}")
+    print(f"remote HEAD: {remote_head}")
 
-    # 6. POST commits
-    print("\n--- Step 3: POST commits ---")
-    commit_msg = """init: v3.2 整合 + LLM 配置
+    unpushed = get_unpushed_commits(remote_head, local_head)
+    if not unpushed:
+        print("\nNo unpushed commits. Done.")
+        return
+    print(f"\nunpushed commits: {len(unpushed)}")
+    for s in unpushed:
+        msg = get_commit_info(s)["message"].splitlines()[0]
+        print(f"  {s[:10]}  {msg}")
 
-- 整合 portal-clone 苹果风首页（37.3KB，覆盖 main 旧 v3 中性版）
-- 移植 LLM 配置 modal（HTMX + 自包含 style），保存到 ~/.ideon-portal/llm_settings.yaml
-- 新增 /api/settings/llm-modal|llm|llm/test 三个路由
-- topbar LLM pill 改为可点击（点开配置弹窗）
-- HANDOFF.md 增加 v3.2 章节
-- 增加 .gitignore（_bak-* / *.db / __pycache__ 等不进 git）
-- 删 dev-handoff-v2.md（旧版交接文档）
-"""
-    commit_body = {
-        "message": commit_msg,
-        "tree": new_tree_sha,
-        "parents": [REMOTE_HEAD_SHA]
-    }
-    new_commit = http("POST", f"/repos/{REPO}/git/commits", commit_body)
-    new_commit_sha = new_commit["sha"]
-    print(f"new commit sha: {new_commit_sha}")
+    current_remote = remote_head
+    for idx, sha in enumerate(unpushed, 1):
+        info = get_commit_info(sha)
+        title = info["message"].splitlines()[0]
+        files = get_tree_files(info["tree"])
+        print(f"\n[{idx}/{len(unpushed)}] {sha[:10]}  {title}")
+        print(f"  tree={info['tree'][:10]}  files={len(files)}")
 
-    # 7. PATCH ref
-    print("\n--- Step 4: PATCH ref ---")
-    http("PATCH", f"/repos/{REPO}/git/refs/heads/{BRANCH}", {"sha": new_commit_sha})
-    print(f"main -> {new_commit_sha}")
+        # 1. POST blobs
+        blob_shas = {}
+        for i, (path, local_blob_sha) in enumerate(files, 1):
+            blob_shas[path] = upload_blob(local_blob_sha)
+        print(f"  blobs: {len(blob_shas)} uploaded")
 
-    print("\nDONE. Verify:")
+        # 2. POST trees
+        new_tree_sha = upload_tree(files, blob_shas)
+        print(f"  tree  : {new_tree_sha}")
+
+        # 3. POST commit (parent = 当前远端 HEAD，保持 chain)
+        new_commit_sha = http(
+            "POST", f"/repos/{REPO}/git/commits",
+            {"message": info["message"], "tree": new_tree_sha, "parents": [current_remote]},
+        )["sha"]
+        print(f"  commit: {new_commit_sha}")
+
+        # 4. PATCH ref
+        http("PATCH", f"/repos/{REPO}/git/refs/heads/{BRANCH}",
+             {"sha": new_commit_sha})
+        print(f"  ref   : main -> {new_commit_sha[:10]}")
+        current_remote = new_commit_sha
+
+    print(f"\n=== DONE ===")
     verify = http("GET", f"/repos/{REPO}/git/ref/heads/{BRANCH}")
-    print(f"  remote HEAD now: {verify['object']['sha']}")
-    if verify["object"]["sha"] == new_commit_sha:
-        print("  OK")
+    if verify["object"]["sha"] == current_remote:
+        print(f"remote HEAD = {verify['object']['sha']}  OK")
     else:
-        print("  MISMATCH!")
+        print(f"MISMATCH! remote={verify['object']['sha']} expected={current_remote}")
 
 
 if __name__ == "__main__":
