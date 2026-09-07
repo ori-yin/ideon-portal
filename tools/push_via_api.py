@@ -64,14 +64,56 @@ def get_remote_head():
     return http("GET", f"/repos/{REPO}/git/ref/heads/{BRANCH}")["object"]["sha"]
 
 
+def get_remote_tree(remote_head_sha):
+    """通过 API 取远端 HEAD commit 的 tree SHA。"""
+    commit = http("GET", f"/repos/{REPO}/git/commits/{remote_head_sha}")
+    return commit["tree"]["sha"]
+
+
 def get_local_head():
     return git("rev-parse", "HEAD").strip()
 
 
-def get_unpushed_commits(remote_head, local_head):
-    """返回 oldest-first 的 commit SHA 列表。"""
-    out = git("rev-list", "--reverse", f"{remote_head}..{local_head}")
-    return [s.strip() for s in out.splitlines() if s.strip()]
+def get_commit_tree(sha):
+    raw = git("cat-file", "-p", sha)
+    for line in raw.split("\n"):
+        if line.startswith("tree "):
+            return line.split()[1]
+    return None
+
+
+def get_commit_parent(sha):
+    raw = git("cat-file", "-p", sha)
+    for line in raw.split("\n"):
+        if line.startswith("parent "):
+            return line.split()[1]
+    return None
+
+
+def get_unpushed_commits():
+    """从本地 HEAD 沿 parent chain 向上走，收集「message 不在远端最近 20 个 commit」的 commit（oldest first）。
+
+    不依赖 tree SHA 比较（GitHub blob/tree SHA 算法跟本地 git 不同，相同内容 SHA 也不同）。
+    用 commit message 作为内容指纹——message 字符串在跨环境传输时不会变。
+    不依赖 git fetch / rev-list（github.com 被墙）。
+    """
+    # 拿远端最近 20 个 commit 的 message
+    remote_commits = http("GET", f"/repos/{REPO}/commits?sha={BRANCH}&per_page=20")
+    remote_messages = {c["commit"]["message"].strip() for c in remote_commits}
+
+    unpushed = []
+    current = get_local_head()
+    while current:
+        info = get_commit_info(current)
+        msg = info["message"].strip()
+        if msg in remote_messages:
+            break  # 这个 commit 已经推过（message 指纹匹配）
+        unpushed.append(current)
+        parent = get_commit_parent(current)
+        if not parent:
+            break  # 到 root
+        current = parent
+    return list(reversed(unpushed))
 
 
 def get_commit_info(sha):
@@ -126,25 +168,15 @@ def upload_tree(files, blob_shas):
 
 def main():
     print("=== portal push_via_api v2 (sequential) ===\n")
-    # 先 fetch 远端 ref（rev-list 需要本地能解析远端 SHA）
-    try:
-        subprocess.check_output(
-            ["git", "-C", REPO_DIR, "fetch", "origin", BRANCH],
-            stderr=subprocess.STDOUT,
-        )
-    except subprocess.CalledProcessError as e:
-        out = e.output.decode("utf-8", errors="replace") if e.output else ""
-        # 如果远端 ref 已存在但 fetch 报错（比如无 fetch 权限），脚本仍能用 GET 拿 HEAD
-        print(f"  fetch warning: {out.strip() or '(no stderr)'}")
-
     local_head = get_local_head()
     remote_head = get_remote_head()
     print(f"local HEAD : {local_head}")
     print(f"remote HEAD: {remote_head}")
 
-    unpushed = get_unpushed_commits(remote_head, local_head)
+    # 通过 API 比对 commit message 找未推 commit（github.com 被墙不走 git fetch）
+    unpushed = get_unpushed_commits()
     if not unpushed:
-        print("\nNo unpushed commits. Done.")
+        print("\nNo unpushed commits (all local commits' trees match remote). Done.")
         return
     print(f"\nunpushed commits: {len(unpushed)}")
     for s in unpushed:
