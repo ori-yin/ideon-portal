@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Push portal-main v3.2 to ori-yin/ideon-portal via Git Data API.
+"""Push portal-main to ori-yin/ideon-portal via Git Data API.
 
 github.com 被墙，走 api.github.com。
 4 步：blobs → trees → commits → PATCH ref
+
+Token 走环境变量 GITHUB_TOKEN（不能写死，secret scanning 拦）：
+  $env:GITHUB_TOKEN = "ghp_..."; python tools/push_via_api.py
 """
 import os, sys, json, base64, subprocess, urllib.request, urllib.error, time
 
@@ -11,7 +14,7 @@ if not TOKEN:
     sys.exit("GITHUB_TOKEN env var required (e.g. $env:GITHUB_TOKEN='ghp_...')")
 REPO = "ori-yin/ideon-portal"
 BRANCH = "main"
-# 每次 push 前用 `curl -H "Authorization: token ..." https://api.github.com/repos/ori-yin/ideon-portal/git/ref/heads/main` 拿 HEAD
+# 每次 push 前用 `curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/ori-yin/ideon-portal/git/ref/heads/main` 拿 HEAD
 REMOTE_HEAD_SHA = "14c216328bfe6c7173e77b8b608e76f1a0c4711b"
 REMOTE_TREE_SHA = "6821f3ef59367895b4f9c7a14133b93773d5489a"
 REPO_DIR = r"C:\ideon\ideon-portal-main"
