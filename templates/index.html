@@ -262,10 +262,11 @@ main{margin-left:224px;width:calc(100% - 224px);padding:30px 38px 22px;max-width
 }
 .activity:last-child{border-bottom:0}
 .activity-icon{
-  width:31px;height:31px;border-radius:10px;flex-shrink:0;
+  width:40px;height:40px;border-radius:12px;flex-shrink:0;
   background:#eef7f6;display:grid;place-items:center;
   color:var(--green);
 }
+.activity-icon .icon{width:20px;height:20px}  /* 跟 metric-icon 一样的 40→20 比例 */
 .activity:nth-child(2n) .activity-icon{background:#f5efff;color:var(--purple)}
 .activity:nth-child(3n) .activity-icon{background:#fff6f5;color:var(--red)}
 .activity:nth-child(4n) .activity-icon{background:#eaf3ff;color:var(--blue)}
@@ -560,7 +561,7 @@ footer{text-align:center;color:#89909a;font-size:12px;padding:22px 0 0;margin-to
       </div>
       <div class="quick-grid">
         {% for t in cards %}
-        <a class="tool-card" href="/open/{{ t.key }}" data-key="{{ t.key }}" id="card-{{ t.key }}">
+        <a class="tool-card" href="{{ t.target_url }}" data-key="{{ t.key }}" id="card-{{ t.key }}" target="_blank" rel="noopener">
           <div class="tc-icon icon">{{ t.icon | icon_svg | safe }}</div>
           <b class="tc-title">{{ t.title }}</b>
           {% if t.status == 'running' %}<span class="status is-flat running"><span class="dot"></span>运行中</span>
