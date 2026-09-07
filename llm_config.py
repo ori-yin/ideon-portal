@@ -106,13 +106,25 @@ def mask_api_key(api_key: str) -> str:
 # 与 mcd-content-rank/config.py 的 API_PROVIDERS 对齐
 # protocol: "openai" / "anthropic" — 决定调哪个 SDK
 LLM_PROVIDERS = [
-    {"name": "麦当劳AI网关", "base_url": "https://ai-gateway-test.mcdchina.net/v1",
-     "protocol": "openai",
-     "models": ["gemini-3-flash-preview", "gemini-3-pro-image-preview",
-                "deepseek-v3", "claude-sonnet-4.6", "claude-haiku-4.5"]},
     {"name": "MiniMax",     "base_url": "https://api.minimaxi.com/anthropic",
      "protocol": "anthropic",
      "models": ["MiniMax-M3"]},
+    {"name": "火山方舟",     "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+     "protocol": "openai",
+     "models": ["minimax-m3", "deepseek-v4-flash", "GLM-5.2"]},
+    {"name": "百度千帆",     "base_url": "https://qianfan.baidubce.com/v2/coding",
+     "protocol": "openai",
+     "models": ["qianfan-code-latest"]},
+    {"name": "麦当劳AI网关","base_url": "https://ai-gateway-test.mcdchina.net/v1",
+     "protocol": "openai",
+     "models": ["gemini-3-flash-preview", "gemini-3-pro-image-preview",
+                "deepseek-v3", "claude-sonnet-4.6", "claude-haiku-4.5"]},
+    {"name": "SiliconFlow", "base_url": "https://api.siliconflow.cn/v1",
+     "protocol": "openai",
+     "models": ["deepseek-ai/DeepSeek-V3-0324", "Qwen/Qwen2.5-72B-Instruct"]},
+    {"name": "OpenAI",      "base_url": "",
+     "protocol": "openai",
+     "models": ["gpt-4o-mini", "gpt-4o"]},
 ]
 
 
