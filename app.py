@@ -12,14 +12,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import sqlite3
 
 from config import TOOLS, ICON_MAP, IDLE_TIMEOUT_MINUTES, CHECK_INTERVAL_SECONDS, DB_PATH, PORTAL_PORT, STATUS_CACHE_TTL
-from llm_config import load_config, is_configured, save_config, get_status, probe_llm, LLM_PROVIDERS, mask_api_key, reload_cache
+from llm_config import load_config, save_config, get_status, probe_llm, LLM_PROVIDERS
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -47,6 +47,7 @@ ICON_SVG = {
     "chevron-down": '<svg viewBox="0 0 24 24" class="icon"><path d="m6 9 6 6 6-6"/></svg>',
     "search": '<svg viewBox="0 0 24 24" class="icon"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
     "wand-sparkles": '<svg viewBox="0 0 24 24" class="icon"><path d="m15 4 3 3"/><path d="M9 13 4 18"/><path d="m15 4-3 3 6 6 3-3z"/><path d="m19 9 1 1"/><path d="m3 19 2 2"/><path d="m13 4-1 1"/><path d="m21 16-1 1"/><path d="m5 6 1 1"/></svg>',
+    "sparkles": '<svg viewBox="0 0 24 24" class="icon"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>',
 }
 
 
@@ -662,20 +663,20 @@ async def api_settings_llm_modal(request: Request):
                 "provider": cfg.get("provider", ""),
                 "base_url": cfg.get("base_url", ""),
                 "model": cfg.get("model", ""),
-                "api_key": "",  # 密码框不预填；masked_key 提示已有值
+                "api_key": "",  # 密码框不预填
             },
-            "masked_key": mask_api_key(cfg.get("api_key", "")),
             "providers": LLM_PROVIDERS,
-            "errors": [],
-            "test_ok": False,
-            "saved": False,
         },
     )
 
 
 @app.post("/api/settings/llm")
 async def api_settings_llm_save(request: Request):
-    """保存 LLM 配置到 ~/.ideon-portal/llm_settings.yaml。"""
+    """保存 LLM 配置到 ~/.ideon-portal/llm_settings.yaml。返回 JSON {ok, detail}。
+
+    成功 → {ok: True}，前端直接关 modal
+    失败 → {ok: False, detail: "..."}，前端显示在 form 里的红色小字
+    """
     form = await request.form()
     provider = (form.get("provider") or "").strip()
     base_url = (form.get("base_url") or "").strip()
@@ -692,43 +693,20 @@ async def api_settings_llm_save(request: Request):
         errors.append("API Key 不能为空（首次配置必须填）")
 
     if errors:
-        return templates.TemplateResponse(
-            request=request,
-            name="partials/settings_llm_modal.html",
-            context={
-                "request": request,
-                "form": {"provider": provider, "base_url": base_url,
-                         "model": model, "api_key": ""},
-                "masked_key": mask_api_key(cfg_old.get("api_key", "")),
-                "providers": LLM_PROVIDERS,
-                "errors": errors,
-                "test_ok": False,
-                "saved": False,
-            },
-        )
+        return JSONResponse({"ok": False, "detail": " · ".join(errors)})
 
     save_config({"provider": provider, "base_url": base_url,
                  "model": model, "api_key": api_key or cfg_old.get("api_key", "")})
-
-    return templates.TemplateResponse(
-        request=request,
-        name="partials/settings_llm_modal.html",
-        context={
-            "request": request,
-            "form": {"provider": provider, "base_url": base_url,
-                     "model": model, "api_key": ""},
-            "masked_key": mask_api_key(api_key or cfg_old.get("api_key", "")),
-            "providers": LLM_PROVIDERS,
-            "errors": [],
-            "test_ok": False,
-            "saved": True,
-        },
-    )
+    return JSONResponse({"ok": True, "detail": ""})
 
 
 @app.post("/api/settings/llm/test")
 async def api_settings_llm_test(request: Request):
-    """测试当前表单 4 字段能否连上，返回同 modal（test_ok=True/False）。"""
+    """测试当前表单 4 字段能否连上，返回 JSON {ok, detail}。
+
+    返回 JSON 而不是重渲 modal：避免 modal DOM 被销毁重建（动画重跑 + api_key 丢失）。
+    前端 JS 拿到结果后只改测试按钮的样式，文案 / 输入框保持原状。
+    """
     form = await request.form()
     provider = (form.get("provider") or "").strip()
     base_url = (form.get("base_url") or "").strip()
@@ -740,33 +718,18 @@ async def api_settings_llm_test(request: Request):
     effective_model = model or cfg_old.get("model", "")
     effective_url = base_url or cfg_old.get("base_url", "")
 
-    errors = []
     if not provider:
-        errors.append("Provider 不能为空")
+        return JSONResponse({"ok": False, "detail": "Provider 不能为空"})
     if not effective_model:
-        errors.append("Model 不能为空")
+        return JSONResponse({"ok": False, "detail": "Model 不能为空"})
     if not effective_key:
-        errors.append("API Key 不能为空（首次配置必须填）")
+        return JSONResponse({"ok": False, "detail": "API Key 不能为空（首次配置必须填）"})
 
-    test_ok = False
-    detail = ""
-    if not errors:
-        test_ok, detail = probe_llm(provider, effective_url, effective_key, effective_model)
-
-    return templates.TemplateResponse(
-        request=request,
-        name="partials/settings_llm_modal.html",
-        context={
-            "request": request,
-            "form": {"provider": provider, "base_url": effective_url,
-                     "model": effective_model, "api_key": ""},
-            "masked_key": mask_api_key(effective_key),
-            "providers": LLM_PROVIDERS,
-            "errors": ([] if test_ok else ([detail] if detail else errors)),
-            "test_ok": test_ok,
-            "saved": False,
-        },
-    )
+    test_ok, detail = probe_llm(provider, effective_url, effective_key, effective_model)
+    if not test_ok:
+        import sys
+        print(f"[llm-test] FAIL provider={provider!r} model={effective_model!r} base_url={effective_url!r}\n{detail}", file=sys.stderr)
+    return JSONResponse({"ok": test_ok, "detail": detail or ""})
 
 
 if __name__ == "__main__":

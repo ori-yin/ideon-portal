@@ -9,7 +9,7 @@ ICON_MAP = {
     "reach-trend": "trending-up",
     "copy-analyzer": "pencil",
     "ctr-predictor": "activity",
-    "studio": "wand-sparkles",
+    "studio": "sparkles",
     "insights": "bar-chart-3",
 }
 
