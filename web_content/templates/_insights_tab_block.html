@@ -1,0 +1,48 @@
+{# partials/_insights_tab_block.html — 04 tab 局部替换 fragment
+
+HTMX 端点 /api/insights/tab 返回这个片段，被
+- 主模板 #ins-tab-block 替换（切 tab）
+- 各 tab filter form 提交后也替换（调 slider / 选词）
+
+不依赖 base.html，独立渲染。
+#}
+
+<div id="ins-tab-block">
+  <div class="ins-tabs">
+    {% set tabs = [
+      ('rank', '高效 Plan 排行'),
+      ('wf',   '高低表现词'),
+      ('ef',   'Emoji 表现'),
+      ('tl',   '标题字数'),
+      ('sim',  '历史相似'),
+      ('daily','每日趋势'),
+      ('owner','Owner 对比'),
+    ] %}
+    {% for tid, tname in tabs %}
+    <a href="/insights?tab={{ tid }}"
+       hx-get="/api/insights/tab?tab={{ tid }}"
+       hx-target="#ins-tab-block"
+       hx-swap="outerHTML"
+       hx-push-url="true"
+       class="ins-tab {% if active_tab == tid %}active{% endif %}">{{ tname }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="ins-panel active">
+    {% if active_tab == 'rank' %}
+      {% include "partials/04_rank.html" %}
+    {% elif active_tab == 'wf' %}
+      {% include "partials/04_word_freq.html" %}
+    {% elif active_tab == 'ef' %}
+      {% include "partials/04_table.html" %}
+    {% elif active_tab == 'tl' %}
+      {% include "partials/04_title_len.html" %}
+    {% elif active_tab == 'sim' %}
+      {% include "partials/04_similar.html" %}
+    {% elif active_tab == 'daily' %}
+      {% include "partials/04_daily_trend.html" %}
+    {% elif active_tab == 'owner' %}
+      {% include "partials/04_owner.html" %}
+    {% endif %}
+  </div>
+</div>

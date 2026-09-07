@@ -1,4 +1,4 @@
-{% extends "base_8530.html" %}
+{% extends "base.html" %}
 
 {% block title %}内容工坊{% endblock %}
 

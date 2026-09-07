@@ -1,0 +1,59 @@
+{# partials/04_emoji.html — Tab 3: Emoji 表现 #}
+
+<form method="get" action="/insights" class="form-grid form-grid-quad">
+  <input type="hidden" name="tab" value="ef" />
+  <div class="form-row">
+    <label>最少 plan 数</label>
+    <select name="ef_min_plans">
+      {% for v in [1,2,3,5,10,20,50] %}
+      <option value="{{ v }}" {% if params.ef_min_plans|string == v|string %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row">
+    <label>前 N 个 emoji</label>
+    <select name="ef_top_n">
+      {% for v in [5,10,20,30,50,100] %}
+      <option value="{{ v }}" {% if params.ef_top_n|string == v|string %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row form-row-span2">
+    <label>输入 emoji 查对比</label>
+    <input type="text" name="ef_compare_sel" value="{{ params.ef_compare_sel }}"
+           placeholder="任意 emoji，含/不含 plan CTR 对比" maxlength="16"
+           autocomplete="off" />
+  </div>
+  <div class="form-row">
+    <button type="submit" class="btn btn-dark btn-sm">查询</button>
+  </div>
+</form>
+
+{% if ef_compare %}
+<div class="subsection">
+  <div class="subsection-label">emoji 对比 · {{ ef_compare.sel_emoji }}</div>
+  <div class="metric-row metric-row-tri">
+    <div class="metric-box"><div class="ml">含 emoji plan 触达</div><div class="mv">{{ "{:,}".format(ef_compare.reach_with) }}</div></div>
+    <div class="metric-box"><div class="ml">不含 plan 触达</div><div class="mv">{{ "{:,}".format(ef_compare.reach_without) }}</div></div>
+    <div class="metric-box"><div class="ml">差值（pp）</div><div class="mv">{{ "%.2f"|format(ef_compare.delta_pp) }}</div></div>
+  </div>
+  <div class="metric-row metric-row-bi metric-row-spaced">
+    <div class="metric-box"><div class="ml">含 CTR</div><div class="mv">{{ "%.2f"|format(ef_compare.ctr_with) }}%</div></div>
+    <div class="metric-box"><div class="ml">不含 CTR</div><div class="mv">{{ "%.2f"|format(ef_compare.ctr_without) }}%</div></div>
+  </div>
+  <div class="card-desc card-desc-spaced-sm">
+    含该 emoji plan {{ ef_compare.n_plans_with }} 个 / 不含 plan {{ ef_compare.n_plans_without }} 个
+  </div>
+</div>
+{% endif %}
+
+{% if not df_rows %}
+<div class="warning-banner">emoji 数据为空</div>
+{% else %}
+<div class="batch-wrap">
+<table class="batch-table">
+  <thead><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for r in df_rows %}<tr>{% for c in columns %}<td>{{ r[c] }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table>
+</div>
+{% endif %}

@@ -1,0 +1,73 @@
+{# partials/04_word_freq.html — Tab 2: 高低表现词
+
+依赖：
+  - high_rows / low_rows（list[dict]）
+  - compare（dict，含 reach_with/reach_without/delta_pp/ctr_with/ctr_without/n_plans_with/n_plans_without/sel_word）
+#}
+
+<form method="get" hx-get="/api/insights/tab" hx-target="#ins-tab-block" hx-swap="outerHTML" class="form-grid form-grid-quad">
+  <input type="hidden" name="tab" value="wf" />
+  <div class="form-row">
+    <label>最少 plan 数</label>
+    <select name="wf_min_plans">
+      {% for v in [1,2,3,5,10,20,50] %}
+      <option value="{{ v }}" {% if params.wf_min_plans|string == v|string %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row">
+    <label>前 N 个词</label>
+    <select name="wf_top_n">
+      {% for v in [10,20,30,50,100,200] %}
+      <option value="{{ v }}" {% if params.wf_top_n|string == v|string %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row form-row-span2">
+    <label>输入词查对比</label>
+    <input type="text" name="wf_compare_sel" value="{{ params.wf_compare_sel }}"
+           placeholder="任意词，含/不含 plan CTR 对比" maxlength="32"
+           autocomplete="off" />
+  </div>
+  <div class="form-row">
+    <button type="submit" class="btn btn-dark btn-sm">查询</button>
+  </div>
+</form>
+
+{% if compare %}
+<div class="subsection">
+  <div class="subsection-label">单词对比 · {{ compare.sel_word }}</div>
+  <div class="metric-row metric-row-tri">
+    <div class="metric-box"><div class="ml">含该词 plan 触达</div><div class="mv">{{ "{:,}".format(compare.reach_with) }}</div></div>
+    <div class="metric-box"><div class="ml">不含 plan 触达</div><div class="mv">{{ "{:,}".format(compare.reach_without) }}</div></div>
+    <div class="metric-box"><div class="ml">差值（pp）</div><div class="mv">{{ "%.2f"|format(compare.delta_pp) }}</div></div>
+  </div>
+  <div class="metric-row metric-row-bi metric-row-spaced">
+    <div class="metric-box"><div class="ml">含 CTR</div><div class="mv">{{ "%.2f"|format(compare.ctr_with) }}%</div></div>
+    <div class="metric-box"><div class="ml">不含 CTR</div><div class="mv">{{ "%.2f"|format(compare.ctr_without) }}%</div></div>
+  </div>
+  <div class="card-desc card-desc-spaced-sm">
+    含该词 plan {{ compare.n_plans_with }} 个 / 不含 plan {{ compare.n_plans_without }} 个
+  </div>
+</div>
+{% endif %}
+
+<div class="subsection">
+  <div class="subsection-label">高效词 Top15（差值 > 0）</div>
+  {% if high_rows %}
+  <div class="batch-wrap"><table class="batch-table">
+    <thead><tr>{% for c in high_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for r in high_rows %}<tr>{% for c in high_cols %}<td>{{ r[c] }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty-state">无高效词数据</div>{% endif %}
+</div>
+
+<div class="subsection">
+  <div class="subsection-label">低效词 Top15（差值 &lt; 0）</div>
+  {% if low_rows %}
+  <div class="batch-wrap"><table class="batch-table">
+    <thead><tr>{% for c in low_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for r in low_rows %}<tr>{% for c in low_cols %}<td>{{ r[c] }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty-state">无低效词数据</div>{% endif %}
+</div>

@@ -1,0 +1,24 @@
+{# partials/04_title_len.html — Tab 4: 标题字数 #}
+
+{% if not df_rows %}
+<div class="warning-banner">缺「标题」或「Plan ID」列，或无有效数据</div>
+{% else %}
+<div class="batch-wrap">
+<table class="batch-table">
+  <thead><tr>
+    <th>字数桶</th><th>n_plans</th><th>触达成功</th><th>点击</th><th>加权CTR%</th>
+  </tr></thead>
+  <tbody>
+  {% for r in df_rows %}
+  <tr>
+    <td>{{ r['字数桶'] }}</td>
+    <td>{{ r['n_plans'] }}</td>
+    <td>{{ "{:,}".format(r['触达成功']) }}</td>
+    <td>{{ "{:,}".format(r['点击']) }}</td>
+    <td>{{ "%.2f"|format(r['加权CTR%']) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
