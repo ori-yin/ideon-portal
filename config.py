@@ -29,14 +29,14 @@ TOOLS = {
         "service_port": 8504,
     },
     "copy-analyzer": {
-        "title": "文案解析",
+        "title": "文案诊断",
         "subtitle": "企微 1v1 文案 AI 诊断",
         "service": "copy-analyzer.service",
         "path_prefix": "/copy-analyzer/",
         "service_port": 8502,
     },
     "ctr-predictor": {
-        "title": "CTR 预测",
+        "title": "内容预测",
         "subtitle": "推送内容点击率预测",
         "service": "ctr-predictor.service",
         "path_prefix": "/ctr-predictor/",

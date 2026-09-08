@@ -187,6 +187,16 @@ Phase 55 后用户跑 portal 8001 + 拉起 8530，发现两件事：
 ### 留 v3.6
 mcd-ai Phase 55 段的 🟡 10 条 / 🟢 7 条 finding 未动。
 
+### hotfix v2 (2026-09-08) — 中台卡片改名
+用户反馈 portal 8001 首页 5 卡片有 2 个跟 mcd-ai 子项目撞词/不够直白。
+- `config.py:32` `copy-analyzer.title` 文案解析 → **文案诊断**（对齐 mcd-ai 文案/内容类命名）
+- `config.py:39` `ctr-predictor.title` CTR 预测 → **内容预测**
+- subtitle 不动（功能描述无需改）
+- 同步精简 mcd-ai `web/templates/partials/llm_pill.html`（右上角 pill）：删 `LLM · {{ llm_provider }} · {{ llm_model }}` 内部模型信息，改成 portal 8001 顶部同款 `LLM 已连接` / `LLM 未配置`（只绿点 + 状态文）
+- 详情见 `C:\ideon\mcd-ai-content-platform\Handoff.md` §6.1 Phase 56
+
+**已知限制**：portal 改 `config.py` 不会自动重载——常驻进程（gunicorn/uvicorn）需前台重启才生效。
+
 ---
 
 ## 已知坑
