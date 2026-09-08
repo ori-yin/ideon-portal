@@ -173,6 +173,20 @@ v3.5 推完跑 `/code-review` workflow 复盘（10 finding），按 🔴/🟡/�
 ### 验证
 `python -c "import app; import config; print(config.TOOLS['studio']['service_port'])"` → `8530` ✅；`_load_yaml()` 模拟坏 YAML → raise RuntimeError 不再静默 ✅。
 
+### hotfix (2026-09-08)
+Phase 55 后用户跑 portal 8001 + 拉起 8530，发现两件事：
+- **A · portal favicon 缺失**：浏览器 tab 没图标，`/favicon.ico` 404。`templates/index.html` head 加 `<link rel="icon" type="image/svg+xml" href="/static/img/mcdonalds.svg?v=20260908">`（复用 `static/img/mcdonalds.svg`，379B 金黄）。
+- **B · studio/insights 跳转 500**：根因是 mcd-ai 仓库的 Phase 55 C 段修子页 active 高亮时用了 Python generator expression `(c.id for c in page.children)`，**Jinja2 不支持** → `TemplateSyntaxError` → 500。修法见 `C:\ideon\mcd-ai-content-platform\Handoff.md` §6.1 Phase 55.1。
+- portal 端验证：用 `curl -X POST http://127.0.0.1:8001/api/restart/studio` + `curl -X POST http://127.0.0.1:8001/api/start/insights` 让 portal 重拉 8530；5 业务页 curl 全 200。
+
+### 落地（2026-09-08 已 commit + 推远端）
+1. portal favicon link → 本地 commit `35ccc34`
+2. mcd-ai `web/templates/base.html` Jinja2 语法修复 + `tests/verify.py` §62 `test_all_templates_parse`（遍历 23 个模板走 `env.parse()`，Jinja 语法错立即 FAIL）→ mcd-ai 本地 commit `8dc8519`，verify.py **849 PASS / 0 FAIL**
+3. 两个仓库均走 `tools/push_via_api.py`（Git Data API，绕开 github.com 被墙）
+
+### 留 v3.6
+mcd-ai Phase 55 段的 🟡 10 条 / 🟢 7 条 finding 未动。
+
 ---
 
 ## 已知坑
