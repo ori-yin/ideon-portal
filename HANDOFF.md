@@ -108,17 +108,33 @@ tools/push_via_api.py  (github.com 被墙时走 api.github.com 推)
 - 子项目本来就有完整 web 层，复制到中台 = 两边维护同一份代码（后续升级会分裂）
 - 由此引入 4 个本不该有的踩坑（namespace 冲突 / 关键函数误判为死代码 / 子项目白名单冲突 / CSS 文件覆盖）
 
-**回滚动作**：
-1. `app.py` 撤掉子项目相关 `include_router`
-2. `config.py` 相关工具改回 `external` + `path_prefix=http://localhost:子项目端口/...`
-3. 删除中台里的子项目代码目录（`web_content/`）
-4. 子项目进程由子项目自己维护，中台只管 `/open/{key}` 跳转
+---
 
-**架构教训**（下次不要再犯）：
+## v3.5 (2026-09-07) — 回滚 v3.4 + 清理业务层副本
+
+v3.4 错误的回滚已落地，分两个 commit：
+
+### 6ff0413 — 回滚 v3.4 include_router
+
+- `app.py` 撤 `from web_content.app import router as content_router` + `app.include_router(content_router)`
+- `config.py` studio/insights `type=internal` → `external`，加 `dev_port: 8530` + `path_prefix=http://localhost:8530/{studio,insights}` + `external_blank: True`
+- 删除 `web_content/` 整个目录（31 个文件，全部在 git 跟踪，可 `git checkout 7d61fa4 -- web_content/` 恢复）
+
+### 15ed7a8 — 清理 services/ai_content 业务层副本
+
+v3.2 init 时（commit `be62978`）带入的 mcd-ai 业务层副本，v3.4 用 `web_content/app.py` 当唯一调用者，v3.5 删 `web_content/` 后无引用方。
+
+- 删 `services/ai_content/` 整目录（5 个子目录，75 个文件，660K 业务代码 + 228K data/）
+- 删前已对比 `data/` 8 个文件（含 `lgbm_model_v1.pkl`）与 `mcd-ai-content-platform/data/` **8/8 字节级一致**，零风险
+- `services/` 目录空 → rmdir
+
+**架构教训**（v3.4 / v3.2 的根因相同，合并成 4 条）：
 1. **中台不嵌业务**：子项目自己跑自己的 web 服务，中台只做导航 + 启停 + 配置
 2. **代码不复制**：子项目升级 web 层时，中台不需要同步（避免双份维护漂移）
 3. **配置不共享**：每个子项目自己管 LLM / DB / 配置；中台的 `~/.ideon-portal/llm_settings.yaml` 跟子项目无关
 4. **不要为「整合」做架构妥协**：业务连贯 ≠ 进程合并；保持并列关系
+
+**验证**：`py_compile` + `import app` 19 routes OK（15 中台 + 3 LLM API + static mount），`/studio` `/insights` 已从 portal 路由表移除；`llm_config.get_status()` 仍 `configured=True / MiniMax / MiniMax-M3 / has_key=True`（凭证未动）。
 
 ---
 
