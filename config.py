@@ -52,21 +52,26 @@ TOOLS = {
         "dev_cwd": r"C:\Users\a952462\OneDrive - ATOS\桌面\mcd-report-archive",
         "dev_port": 8002,
     },
-    # v3.4：从 mcd-ai-content-platform/web 迁过来，sub-app include_router
-    # type=internal：新标签页打开 path_prefix，走 portal 自身路由
+    # v2.2: 内容工坊 / 历史洞察 内部工具（portal 自身的路由）
+    # type=internal：新标签页打开 path_prefix，不走 systemd / dev_cmd
+    # "external" (默认) 走 /open/{tool_key} 中转页 + subprocess 启停
     "studio": {
         "title": "内容工坊",
         "subtitle": "LLM 生成 + CTR 预测 + 规则校验",
-        "type": "internal",
+        "type": "external",
         "service": "",
-        "path_prefix": "/studio",
+        "dev_port": 8530,
+        "path_prefix": "http://localhost:8530/studio",
+        "external_blank": True,
     },
     "insights": {
         "title": "历史洞察",
         "subtitle": "Plan 排行 · 高低表现词 · 每日趋势",
-        "type": "internal",
+        "type": "external",
         "service": "",
-        "path_prefix": "/insights",
+        "dev_port": 8530,
+        "path_prefix": "http://localhost:8530/insights",
+        "external_blank": True,
     },
 }
 
