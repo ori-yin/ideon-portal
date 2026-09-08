@@ -47,22 +47,35 @@ def _migrate_legacy_if_needed() -> None:
 def _load_yaml() -> dict:
     """加载并过滤到 REQUIRED_FIELDS（单进程内缓存，配置改后清缓存）。
 
-    优先 canonical ~/.ideon/，回退 LEGACY_PATH ~/.ideon-portal/。
+    优先 canonical ~/.ideon/，回退 LEGACY_PATH ~/.ideon-portal/（仅在 canonical 不存在时）。
+    canonical 存在但解析失败时 raise，避免用户配置更新被旧 LEGACY_PATH 静默覆盖。
     Windows 上 PyYAML 默认走 cp1252 解析会导致中文 mojibake，
     所以用 binary mode 读 + utf-8 decode 强制 UTF-8（utf-8-sig 兼容 BOM）。
     """
     _migrate_legacy_if_needed()
-    for path in (CONFIG_PATH, LEGACY_PATH):
-        if not path.exists():
-            continue
+
+    def _read_one(path: Path) -> dict:
+        with path.open("rb") as f:
+            raw = f.read()
+        text = raw.decode("utf-8-sig", errors="replace")
+        data = yaml.safe_load(text) or {}
+        return {k: str(data.get(k, "")).strip() for k in REQUIRED_FIELDS}
+
+    # canonical 存在 → 必读它，解析失败 raise（不让用户的更新悄悄丢）
+    if CONFIG_PATH.exists():
         try:
-            with path.open("rb") as f:
-                raw = f.read()
-            text = raw.decode("utf-8-sig", errors="replace")
-            data = yaml.safe_load(text) or {}
-            return {k: str(data.get(k, "")).strip() for k in REQUIRED_FIELDS}
+            return _read_one(CONFIG_PATH)
+        except yaml.YAMLError as e:
+            raise RuntimeError(f"解析 {CONFIG_PATH} 失败（YAML 格式错），避免回退到旧 LEGACY_PATH 静默丢数据: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"读取 {CONFIG_PATH} 失败: {e}") from e
+
+    # canonical 不存在时，LEGACY_PATH 才作为兜底（v3.4 → v3.5 迁移过渡期）
+    if LEGACY_PATH.exists():
+        try:
+            return _read_one(LEGACY_PATH)
         except Exception:
-            continue
+            return {}
     return {}
 
 

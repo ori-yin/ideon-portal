@@ -19,24 +19,28 @@ TOOLS = {
         "subtitle": "内容排行榜 · 多维度评分",
         "service": "ideon.service",
         "path_prefix": "/content-rank/",
+        "service_port": 8501,
     },
     "reach-trend": {
         "title": "触达趋势",
         "subtitle": "CNN 多渠道触达分析",
         "service": "reach-trend.service",
         "path_prefix": "/reach-trend/",
+        "service_port": 8504,
     },
     "copy-analyzer": {
         "title": "文案解析",
         "subtitle": "企微 1v1 文案 AI 诊断",
         "service": "copy-analyzer.service",
         "path_prefix": "/copy-analyzer/",
+        "service_port": 8502,
     },
     "ctr-predictor": {
         "title": "CTR 预测",
         "subtitle": "推送内容点击率预测",
         "service": "ctr-predictor.service",
         "path_prefix": "/ctr-predictor/",
+        "service_port": 8503,
     },
     "library": {
         "title": "图书馆",
@@ -51,6 +55,7 @@ TOOLS = {
         "dev_cmd": ["python", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8002"],
         "dev_cwd": r"C:\Users\a952462\OneDrive - ATOS\桌面\mcd-report-archive",
         "dev_port": 8002,
+        "service_port": 8002,
     },
     # v3.5：内容工坊 / 历史洞察 走 portal 启停模式（sub-app 嵌入已回滚）
     # type=external + path_prefix 相对路径 + dev_cmd/dev_cwd/dev_port 三件套
@@ -66,6 +71,7 @@ TOOLS = {
         "dev_cmd": ["python", "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8530"],
         "dev_cwd": r"C:\ideon\mcd-ai-content-platform\web",
         "path_prefix": "/studio",
+        "service_port": 8530,
     },
     "insights": {
         "title": "历史洞察",
@@ -76,6 +82,7 @@ TOOLS = {
         "dev_cmd": ["python", "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8530"],
         "dev_cwd": r"C:\ideon\mcd-ai-content-platform\web",
         "path_prefix": "/insights",
+        "service_port": 8530,
     },
 }
 

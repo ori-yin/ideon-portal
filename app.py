@@ -64,25 +64,20 @@ templates.env.filters["icon_svg"] = _icon_svg
 
 
 def _tool_target(tool_key: str, *, via_loading: bool = False) -> str:
-    """跳转 URL：dev 模式用绝对端口 URL+path_prefix 子路径，VM 模式用 path_prefix
-    （或 /open/key 走中转页触发启动）。
-    v3.5：dev 模式也走 /open/{key} 中转页（via_loading=True 强制），由 portal 探活 +
-    start_dev 拉起子进程；target_url 在中转页探测端口就绪后才返回 absolute URL+path_prefix。
+    """跳转 URL：v3.5 后 web_content sub-app 已删，所有外部工具走中转页触发启停 + 探活，
+    最后给浏览器跳绝对 URL（dev 模式 dev_port / VM 模式 service_port）。
+    via_loading=True 时仅返回中转页 /open/{key}（不直接跳终点）。
     """
     tool = TOOLS[tool_key]
-    # v2.2 internal 类型：portal 自身的路由，直接走 path_prefix（前端 target=_blank 新开标签）
+    # internal 类型：portal 自身页面，直接走 path_prefix
     if tool.get("type") == "internal":
         return tool["path_prefix"]
-    # v3.5 工具卡：让 dev 模式也走中转页（之前直跳绝对 URL，portal 失去进程控制权）
     if via_loading:
         return f"/open/{tool_key}"
-    # v3.0: path_prefix 已是绝对 URL（如 http://localhost:8530/studio），VM 模式直接用
-    pf = tool.get("path_prefix", "")
-    if pf.startswith("http://") or pf.startswith("https://"):
-        return pf
-    if not HAS_SYSTEMCTL and tool.get("dev_port"):
-        # dev 模式：保留 path_prefix 子路径（/studio 不是 /）
-        return f"http://127.0.0.1:{tool['dev_port']}{pf}"
+    # 绝对 URL：dev 模式走 dev_port，VM 模式走 service_port（端口从 config.TOOLS 读）
+    port = tool.get("dev_port") if not HAS_SYSTEMCTL else tool.get("service_port")
+    if port:
+        return f"http://127.0.0.1:{port}{tool['path_prefix']}"
     return tool["path_prefix"]
 
 

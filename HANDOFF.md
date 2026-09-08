@@ -152,6 +152,27 @@ v3.2 init 时（commit `be62978`）带入的 mcd-ai 业务层副本，v3.4 用 `
 
 **验证**：`py_compile` + `import app` 19 routes OK（15 中台 + 3 LLM API + static mount），`/studio` `/insights` 现在走 `/open/{key}` 中转页（dev 模式 portal 拉起 8530）；mcd-ai `tests/verify.py` **848 PASS / 0 FAIL**（基线 847 + LEGACY patch 验证多 1 个）；LLM `get_status()` `configured=True / MiniMax / MiniMax-M3 / has_key=True`，`~/.ideon/llm_settings.yaml` 已自动生成。
 
+## v3.5.1 (2026-09-08) — review 修复 2 个🔴 bug
+
+v3.5 推完跑 `/code-review` workflow 复盘（10 finding），按 🔴/🟡/🟢 分级，本轮用户拍板**只修 🔴**，🟡/🟢 延后下轮。
+
+### 🔴 VM 模式点 studio/insights → 404
+**根因**：`config.TOOLS` 所有 `path_prefix` 是相对路径（v3.5 删 web_content sub-app 后），`_tool_target()` VM 分支返 `return tool["path_prefix"]` 让浏览器跳 `/studio`，portal 没代理该路径 → 404。
+**修法**：
+- `config.py` 给每个工具加 `service_port` 字段（content-rank=8501 / reach-trend=8504 / copy-analyzer=8502 / ctr-predictor=8503 / library=8002 / studio=insights=8530）
+- `app.py:_tool_target()` 重构：VM 模式走 `http://127.0.0.1:{service_port}{path_prefix}`，dev 模式走 `dev_port`（端口从 `config.TOOLS` 读，不再 hard-code 8001/8530）
+- 删 dead branch（`pf.startswith("http://")` + `not HAS_SYSTEMCTL and dev_port` 两条永远不触发的分支）
+
+### 🔴 `_load_yaml` 静默 fallback → 用户 LLM 更新悄悄丢
+**根因**（`llm_config.py:46-66`）：CONFIG_PATH 存在但 YAML 坏了 → `except Exception: continue` → 静默回退到 LEGACY_PATH 旧值 → 用户更新被旧 LEGACY_PATH 覆盖且无任何提示。
+**修法**：canonical `~/.ideon/llm_settings.yaml` 存在但解析失败 → raise RuntimeError（含路径+错误）；只有 CONFIG_PATH 不存在时才回退到 LEGACY_PATH（v3.4 → v3.5 迁移过渡期）。
+
+### 不动
+🟡 4 条（api_summary over-count / _tool_for_service 顺序依赖 / external_blank 死字段 / 死注释指向已删文件）+ 🟢 4 条 — 留 v3.6 评估。
+
+### 验证
+`python -c "import app; import config; print(config.TOOLS['studio']['service_port'])"` → `8530` ✅；`_load_yaml()` 模拟坏 YAML → raise RuntimeError 不再静默 ✅。
+
 ---
 
 ## 已知坑
@@ -171,15 +192,15 @@ v3.2 init 时（commit `be62978`）带入的 mcd-ai 业务层副本，v3.4 用 `
 2. ⏳ 推 portal v3.5 6 个 commit 到远端（`6ff0413` / `15ed7a8` / `2abb0a3` / `8829ebe` / `7203544` / `a4da3cf`），需走 `tools/push_via_api.py`（github.com 被墙——用户本机跑）
 3. ⏳ mcd-ai 仓库独立 push：v3.5 两个 commit `72b88a3`（代码）+ `a0978af`（Handoff 文档），mcd-ai 自己的 push 工具
 4. ⏳ VM 上 4 个 Streamlit 工具 LLM 路径同步（openclaw 维护，不在本轮范围）
-5. ⏳ **干掉 8530 中台首页**（2026-09-07 用户拍板方向，等下次 session 做）
+5. ✅ **干掉 8530 中台首页**（2026-09-07 当日完成 · 见 mcd-ai Handoff §6.1 Phase 53）
    - 根因：mcd-ai 8530 内部 nav 的"首页"按钮跳 `/`，渲染 `home.html`（5 张工具卡），视觉上跟 portal 中台撞
    - 目标：`/` 改 303 → `/studio`（用户进 8530 默认进业务页）+ 删 `home.html` + 侧栏 nav 去掉"首页"按钮
    - 工作量：~1 小时（2-3 个文件改动）
    - 风险：mcd-ai 直访用户下次打开默认进 studio，体感比"5 张卡"更直接
-6. ⏳ **字典维护放侧栏**（2026-09-07 用户提出方向，待规划）
-   - 8530 侧栏分 2 块：业务（studio/diagnosis/batch/insights/feedback）+ 管理（settings 字典 + LLM 配置 + 进程状态）
+6. ✅ **字典维护放侧栏**（2026-09-07 当日完成 · 见 mcd-ai Handoff §6.1 Phase 53）
+   - 8530 侧栏分 2 块：业务（studio/diagnosis/batch/insights/feedback）+ 管理（settings 字典 + LLM 配置）
    - 跟 portal 侧栏布局对齐（nav + nav-child 2 层）
-   - 待确认 3 件事：① "侧边栏"是 8530 自己的还是 portal 的 ② settings 页面是否拆成"侧栏列表+右侧编辑" ③ LLM modal 是不是升级成完整页
+   - 用户拍板 3 件事：① 8530 自己的侧栏（不动 portal）② settings 拆成"侧栏 6 字典列表 + 右侧编辑面板" ③ LLM modal 升级成完整页
    - 工作量：~半天
      - `~/.ideon-portal/llm_settings.yaml`（portal）
      - `~/.mcd-ai/llm_settings.yaml`（mcd-ai）
