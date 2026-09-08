@@ -52,17 +52,20 @@ TOOLS = {
         "dev_cwd": r"C:\Users\a952462\OneDrive - ATOS\桌面\mcd-report-archive",
         "dev_port": 8002,
     },
-    # v2.2: 内容工坊 / 历史洞察 内部工具（portal 自身的路由）
-    # type=internal：新标签页打开 path_prefix，不走 systemd / dev_cmd
-    # "external" (默认) 走 /open/{tool_key} 中转页 + subprocess 启停
+    # v3.5：内容工坊 / 历史洞察 走 portal 启停模式（sub-app 嵌入已回滚）
+    # type=external + path_prefix 相对路径 + dev_cmd/dev_cwd/dev_port 三件套
+    # → 点击触发 /open/{key} 中转页 → start_dev 拉起 8530 → 30min 闲置 idle_checker 回收
+    # 注意：path_prefix 用 /studio /insights（相对路径），不要 http:// 绝对 URL
+    # 否则 _tool_target() 提前 return 跳过中转页，portal 失去进程控制权
     "studio": {
         "title": "内容工坊",
         "subtitle": "LLM 生成 + CTR 预测 + 规则校验",
         "type": "external",
         "service": "",
         "dev_port": 8530,
-        "path_prefix": "http://localhost:8530/studio",
-        "external_blank": True,
+        "dev_cmd": ["python", "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8530"],
+        "dev_cwd": r"C:\ideon\mcd-ai-content-platform\web",
+        "path_prefix": "/studio",
     },
     "insights": {
         "title": "历史洞察",
@@ -70,8 +73,9 @@ TOOLS = {
         "type": "external",
         "service": "",
         "dev_port": 8530,
-        "path_prefix": "http://localhost:8530/insights",
-        "external_blank": True,
+        "dev_cmd": ["python", "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8530"],
+        "dev_cwd": r"C:\ideon\mcd-ai-content-platform\web",
+        "path_prefix": "/insights",
     },
 }
 
