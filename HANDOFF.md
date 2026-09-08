@@ -168,9 +168,19 @@ v3.2 init 时（commit `be62978`）带入的 mcd-ai 业务层副本，v3.4 用 `
 ## 待办
 
 1. ✅ **LLM 配置全局生效**（2026-09-07 v3.5 7203544 完成）
-2. ⏳ 推 portal v3.5 4 个 commit 到远端（`6ff0413` / `15ed7a8` / `8829ebe` / `7203544`），需走 `tools/push_via_api.py`（github.com 被墙）
+2. ⏳ 推 portal v3.5 6 个 commit 到远端（`6ff0413` / `15ed7a8` / `2abb0a3` / `8829ebe` / `7203544` / `a4da3cf`），需走 `tools/push_via_api.py`（github.com 被墙——用户本机跑）
 3. ⏳ mcd-ai 仓库独立 push：v3.5 两个 commit `72b88a3`（代码）+ `a0978af`（Handoff 文档），mcd-ai 自己的 push 工具
 4. ⏳ VM 上 4 个 Streamlit 工具 LLM 路径同步（openclaw 维护，不在本轮范围）
+5. ⏳ **干掉 8530 中台首页**（2026-09-07 用户拍板方向，等下次 session 做）
+   - 根因：mcd-ai 8530 内部 nav 的"首页"按钮跳 `/`，渲染 `home.html`（5 张工具卡），视觉上跟 portal 中台撞
+   - 目标：`/` 改 303 → `/studio`（用户进 8530 默认进业务页）+ 删 `home.html` + 侧栏 nav 去掉"首页"按钮
+   - 工作量：~1 小时（2-3 个文件改动）
+   - 风险：mcd-ai 直访用户下次打开默认进 studio，体感比"5 张卡"更直接
+6. ⏳ **字典维护放侧栏**（2026-09-07 用户提出方向，待规划）
+   - 8530 侧栏分 2 块：业务（studio/diagnosis/batch/insights/feedback）+ 管理（settings 字典 + LLM 配置 + 进程状态）
+   - 跟 portal 侧栏布局对齐（nav + nav-child 2 层）
+   - 待确认 3 件事：① "侧边栏"是 8530 自己的还是 portal 的 ② settings 页面是否拆成"侧栏列表+右侧编辑" ③ LLM modal 是不是升级成完整页
+   - 工作量：~半天
      - `~/.ideon-portal/llm_settings.yaml`（portal）
      - `~/.mcd-ai/llm_settings.yaml`（mcd-ai）
      - mcd-content-rank / mcd-copy-analyzer / mcd-ctr-predictor / mcd-reach-trend / mcd-report-archive 各自还有配置（散在项目目录或各自家目录）
@@ -195,16 +205,18 @@ v3.2 init 时（commit `be62978`）带入的 mcd-ai 业务层副本，v3.4 用 `
 - UI 不要 emoji（用 lucide SVG）
 - 改配色：grep 颜色变量 → 批量替换
 - 改 HTML：先 Read 整段再改；改文件名走 grep → Edit
-- 改 LLM 配置：中台走 `~/.ideon-portal/llm_settings.yaml`（**不与子项目共享**）
+- 改 LLM 配置：中台走 `~/.ideon/llm_settings.yaml`（v3.5 起 canonical，子项目共享读取），旧 `~/.ideon-portal/` 和 `~/.mcd-ai/` 保留作为 fallback
 - **改子项目的代码 → 跳到子项目目录去改，别在中台改**
 
 ---
 
-## v3.4+ 推送状态（2026-09-07）
+## v3.5 推送状态（2026-09-07）
 
-- **本地 3 commit 未推**：v3.3 / init 攒在本地未到远端（远端还停在 `d5ff87b`）。今天顺序推上 ori-yin/ideon-portal（push_via_api.py 改成顺序推保留历史）。
-- **v3.4 不推**：v3.4 是错误尝试，已回滚，不入历史；中台回归 v3.3 + init 状态
-- 推完远端 HEAD = init 或 v3.3 二选一（看哪个更稳）
+- **本地 6 commit 未推**：`6ff0413` / `15ed7a8` / `2abb0a3` / `8829ebe` / `7203544` / `a4da3cf`
+- **mcd-ai 本地 2 commit 未推**：`72b88a3` / `a0978af`
+- **本机 push 失败**：跑 `tools/push_via_api.py` 报 `ConnectionResetError [WinError 10054]`——api.github.com 网络层被墙，需用户本机终端再跑
+- **v3.4 不推**：v3.4 是错误尝试，已回滚，不入历史
+- 推完远端 HEAD = `a4da3cf`（portal）/ `a0978af`（mcd-ai）
 
 ---
 
