@@ -2,10 +2,11 @@
 r"""
 services/llm_config.py — Portal 的 LLM 配置（UI 在线改 / 测试 / 保存）
 
-路径：~/.ideon-portal/llm_settings.yaml — 独立于 mcd-ai-content-platform 的 ~/.mcd-ai/llm_settings.yaml
-理由（用户口径 2026-09-04）：「我需要迁移 LLM，但是别把 key 迁移过来」
-- portal 用自己的 yaml 文件，避免无意中读出 8530 项目的 api_key
-- 用户在 portal 里重新填一次（provider / base_url / model / api_key）
+v3.5 LLM 全局生效（方案 B）：canonical 路径 ~/.ideon/llm_settings.yaml
+- 写：portal 写 ~/.ideon/（单点权威，所有子项目读这一份）
+- 读：先 ~/.ideon/，回退 ~/.ideon-portal/（v3.4 之前 portal 自己的位置，零数据丢失）
+- 启动时如果 ~/.ideon/ 不存在但 ~/.ideon-portal/ 存在，自动 copy（用户不用重配）
+- 旧 ~/.ideon-portal/llm_settings.yaml 保留不动，作为历史 fallback 兜底
 
 业务调用：tool_routes 通过 load_config() / is_configured() 决定走真 LLM 还是 Demo 占位
 """
@@ -13,33 +14,56 @@ services/llm_config.py — Portal 的 LLM 配置（UI 在线改 / 测试 / 保�
 from __future__ import annotations
 
 import functools
+import shutil
 from pathlib import Path
 
 import yaml
 
 
-# v2.2: portal 独立配置目录（与 mcd-ai-content-platform 的 ~/.mcd-ai 隔离）
-CONFIG_PATH = Path.home() / ".ideon-portal" / "llm_settings.yaml"
+# v3.5 canonical 路径（portal + mcd-ai 共享）
+CONFIG_PATH = Path.home() / ".ideon" / "llm_settings.yaml"
+# v3.4 之前 portal 自己的路径（v3.5 起回退 fallback）
+LEGACY_PATH = Path.home() / ".ideon-portal" / "llm_settings.yaml"
 REQUIRED_FIELDS = ("provider", "base_url", "model", "api_key")
+
+
+def _migrate_legacy_if_needed() -> None:
+    """首次启动：~/.ideon/ 不存在 + ~/.ideon-portal/ 存在 → 自动 copy。
+    用户不用重配；后续 mcd-ai 等子项目也能读到。
+    """
+    if CONFIG_PATH.exists():
+        return
+    if not LEGACY_PATH.exists():
+        return
+    try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(LEGACY_PATH, CONFIG_PATH)
+    except Exception:
+        # 迁移失败不阻塞（fallback 读 LEGACY_PATH 仍能工作）
+        pass
 
 
 @functools.lru_cache(maxsize=1)
 def _load_yaml() -> dict:
     """加载并过滤到 REQUIRED_FIELDS（单进程内缓存，配置改后清缓存）。
 
+    优先 canonical ~/.ideon/，回退 LEGACY_PATH ~/.ideon-portal/。
     Windows 上 PyYAML 默认走 cp1252 解析会导致中文 mojibake，
     所以用 binary mode 读 + utf-8 decode 强制 UTF-8（utf-8-sig 兼容 BOM）。
     """
-    if not CONFIG_PATH.exists():
-        return {}
-    try:
-        with CONFIG_PATH.open("rb") as f:
-            raw = f.read()
-        text = raw.decode("utf-8-sig", errors="replace")
-        data = yaml.safe_load(text) or {}
-    except Exception:
-        return {}
-    return {k: str(data.get(k, "")).strip() for k in REQUIRED_FIELDS}
+    _migrate_legacy_if_needed()
+    for path in (CONFIG_PATH, LEGACY_PATH):
+        if not path.exists():
+            continue
+        try:
+            with path.open("rb") as f:
+                raw = f.read()
+            text = raw.decode("utf-8-sig", errors="replace")
+            data = yaml.safe_load(text) or {}
+            return {k: str(data.get(k, "")).strip() for k in REQUIRED_FIELDS}
+        except Exception:
+            continue
+    return {}
 
 
 def reload_cache() -> None:
