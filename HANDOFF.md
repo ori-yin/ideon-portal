@@ -110,9 +110,9 @@ tools/push_via_api.py  (github.com 被墙时走 api.github.com 推)
 
 ---
 
-## v3.5 (2026-09-07) — 回滚 v3.4 + 清理业务层副本
+## v3.5 (2026-09-07) — 回滚 v3.4 + 清理 + LLM 全局生效
 
-v3.4 错误的回滚已落地，分两个 commit：
+v3.4 错误的回滚 + 业务层副本清理 + LLM 配置全局生效，分 4 个 commit：
 
 ### 6ff0413 — 回滚 v3.4 include_router
 
@@ -128,30 +128,49 @@ v3.2 init 时（commit `be62978`）带入的 mcd-ai 业务层副本，v3.4 用 `
 - 删前已对比 `data/` 8 个文件（含 `lgbm_model_v1.pkl`）与 `mcd-ai-content-platform/data/` **8/8 字节级一致**，零风险
 - `services/` 目录空 → rmdir
 
-**架构教训**（v3.4 / v3.2 的根因相同，合并成 4 条）：
+### 8829ebe — 修正 config + _tool_target 让 portal 真启停 8530
+
+回滚时抄了 v3.2 init 的 config，但 v3.2 时代 config 本身就有问题：`path_prefix=http://...` + `external_blank=True` 让 `_tool_target()` 走"绝对 URL 早 return"分支，浏览器原生 `target="_blank"` 直跳，**portal 失去 8530 进程控制权**。
+
+- `config.py` studio/insights：删 `external_blank`，`path_prefix` 改相对路径 `/studio` `/insights`，加 `dev_cmd` + `dev_cwd` 三件套
+- `app.py _tool_target()`：`via_loading=True` 强制走 `/open/{key}` 中转页；dev 模式保留 `path_prefix` 子路径（`http://127.0.0.1:8530/studio` 而不是裸 8530/ 根）
+
+### 7203544 — LLM 配置全局生效（方案 B canonical `~/.ideon/llm_settings.yaml`）
+
+用户拍板"LLM 配置应该属于中台，子项目共享" + "VM 留给 openclaw，本地只动 portal + mcd-ai"。
+
+- `llm_config.py`：`CONFIG_PATH` 改 `~/.ideon/llm_settings.yaml`，新增 `LEGACY_PATH = ~/.ideon-portal/llm_settings.yaml` 兜底
+- 启动时 `_migrate_legacy_if_needed()`：自动从 `~/.ideon-portal/` copy 到 `~/.ideon/`（用户不用重配）
+- `_load_yaml` for-loop 遍历两路径，命中任一就返回
+- mcd-ai 同步：`ui/llm_status.py` `CONFIG_PATH` 跟改，web/app.py:1754 `_write_llm_yaml` 写入路径自动跟着指到 canonical
+
+**架构教训**（v3.4 / v3.2 / v3.5 根因合并 4 条）：
 1. **中台不嵌业务**：子项目自己跑自己的 web 服务，中台只做导航 + 启停 + 配置
 2. **代码不复制**：子项目升级 web 层时，中台不需要同步（避免双份维护漂移）
-3. **配置不共享**：每个子项目自己管 LLM / DB / 配置；中台的 `~/.ideon-portal/llm_settings.yaml` 跟子项目无关
+3. **配置单点权威**：LLM 走 `~/.ideon/llm_settings.yaml`，中台写、所有子项目读；旧路径（`~/.ideon-portal/` `~/.mcd-ai/`）保留为 fallback
 4. **不要为「整合」做架构妥协**：业务连贯 ≠ 进程合并；保持并列关系
 
-**验证**：`py_compile` + `import app` 19 routes OK（15 中台 + 3 LLM API + static mount），`/studio` `/insights` 已从 portal 路由表移除；`llm_config.get_status()` 仍 `configured=True / MiniMax / MiniMax-M3 / has_key=True`（凭证未动）。
+**验证**：`py_compile` + `import app` 19 routes OK（15 中台 + 3 LLM API + static mount），`/studio` `/insights` 现在走 `/open/{key}` 中转页（dev 模式 portal 拉起 8530）；mcd-ai `tests/verify.py` **848 PASS / 0 FAIL**（基线 847 + LEGACY patch 验证多 1 个）；LLM `get_status()` `configured=True / MiniMax / MiniMax-M3 / has_key=True`，`~/.ideon/llm_settings.yaml` 已自动生成。
 
 ---
 
 ## 已知坑
 
 - Windows 上 `/api/recent` 永远 `[]`（DB_PATH 是 Linux 路径，UI fallback "暂无访问记录"）
-- Windows 上点 4 个主工具都跳 `?need_start=xxx`（没配 dev_cmd，只有 library 配 8002），VM 上正常
+- Windows 上点 content-rank/reach-trend/copy-analyzer/ctr-predictor 跳 `?need_start=xxx`（没配 dev_cmd，VM 上正常）；studio/insights/library 配了 dev_cmd，本地 portal 直接拉起
 - 中台重启才生效（pip 装完老进程不重 import）
 - 表单切 provider 时 base_url 自动覆盖、model 自动填（单 model）或清空（多 model），但 api_key 不自动填（密码框永远不预填）—— 用户必须手动清掉重输
 - **UI 风格分裂**（已记录，不修）：中台首页走 `portal.css`（苹果风 designUIv3）；点 studio/insights 进去子项目自己的 web 层（侧栏 240px + topbar）。两套独立 CSS 互不影响。要统一得改子项目，工作量大且不属于中台
+- mcd-ai `tests/verify.py` LLM 测试用 monkeypatch `CONFIG_PATH`，**v3.5 改后必须同时 patch `LEGACY_PATH`**（否则回退读到 `~/.mcd-ai/llm_settings.yaml` 真实文件）
 
 ---
 
 ## 待办
 
-1. **LLM 配置全局生效（2026-09-07 用户拍板，未做）**
-   - 现状：每个项目独立配置 LLM，portal 配的只 portal 用；子项目要分别配
+1. ✅ **LLM 配置全局生效**（2026-09-07 v3.5 7203544 完成）
+2. ⏳ 推 portal v3.5 4 个 commit 到远端（`6ff0413` / `15ed7a8` / `8829ebe` / `7203544`），需走 `tools/push_via_api.py`（github.com 被墙）
+3. ⏳ mcd-ai 仓库独立 push：v3.5 两个 commit `72b88a3`（代码）+ `a0978af`（Handoff 文档），mcd-ai 自己的 push 工具
+4. ⏳ VM 上 4 个 Streamlit 工具 LLM 路径同步（openclaw 维护，不在本轮范围）
      - `~/.ideon-portal/llm_settings.yaml`（portal）
      - `~/.mcd-ai/llm_settings.yaml`（mcd-ai）
      - mcd-content-rank / mcd-copy-analyzer / mcd-ctr-predictor / mcd-reach-trend / mcd-report-archive 各自还有配置（散在项目目录或各自家目录）
